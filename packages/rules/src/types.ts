@@ -8,3 +8,9 @@ export interface Piece {
   type: PieceType;
   position: { row: Row; col: Col };
 }
+
+export interface LegalMove {
+  pieceId: Piece["id"];
+  from: Piece["position"];
+  to: Piece["position"];
+}

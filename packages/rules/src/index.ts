@@ -1,4 +1,4 @@
-export type { Side, PieceType, Row, Col, Piece } from "./types";
+export type { Side, PieceType, Row, Col, Piece, LegalMove } from "./types";
 export { createInitialPieces } from "./initial-position";
 export { canRookMoveByGeometry } from "./rook-movement";
 export { canCannonMoveByGeometry } from "./cannon-movement";
@@ -7,3 +7,9 @@ export { canElephantMoveByGeometry } from "./elephant-movement";
 export { canAdvisorMoveByGeometry } from "./advisor-movement";
 export { canGeneralMoveByGeometry } from "./general-movement";
 export { canSoldierMoveByGeometry } from "./soldier-movement";
+export { canPieceMoveByGeometry } from "./piece-movement";
+export { isInCheck } from "./check";
+export { isLegalMove } from "./legal-move";
+export { getLegalMoves } from "./legal-moves";
+export { getGameStatus } from "./game-status";
+export type { GameStatus } from "./game-status";

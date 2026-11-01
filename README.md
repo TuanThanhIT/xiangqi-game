@@ -4,9 +4,13 @@ Dự án web cờ tướng để vừa học lập trình vừa triển khai th�
 
 ## Trạng thái hiện tại
 
-Frontend Next.js dùng TypeScript, App Router, thư mục `src`, ESLint và CSS thông thường. Trang chủ hiển thị bàn cờ SVG khai cuộc và hỗ trợ chọn/bỏ chọn quân bằng chuột, chạm hoặc bàn phím; chưa có chức năng đi quân.
+Frontend Next.js dùng TypeScript, App Router, thư mục `src`, ESLint và CSS thông thường. Hai người có thể chơi luân phiên trên cùng thiết bị, Đỏ đi trước: chọn/bỏ chọn, đi/ăn quân theo luật đã hỗ trợ, xem nước vừa đi và cảnh báo chiếu. Bàn SVG co giãn cho điện thoại, hỗ trợ chuột/chạm và bàn phím (Tab vào bàn, mũi tên chuyển giao điểm, Enter/Space xác nhận).
 
-Backend NestJS chưa triển khai. Workspace rules đã có kiểu dữ liệu quân cờ, hàm tạo thế khai cuộc và kiểm tra hình học cho đủ bảy loại quân; chưa kiểm tra tính hợp lệ toàn trận.
+Trận kết thúc khi bên đến lượt hết nước hợp lệ: bị chiếu là chiếu bí, không bị chiếu vẫn thua vì hết nước (không hòa như cờ vua). Sau kết thúc không thể chọn/đi quân, vẫn điều hướng bàn phím được. Nút “Ván mới” tạo lại khai cuộc; hỏi xác nhận nếu đã đi và trận chưa kết thúc, hủy sẽ giữ nguyên trận.
+
+Trạng thái local chỉ nằm trong bộ nhớ trình duyệt, tải lại trang sẽ mất ván. Chưa có chơi qua mạng hoặc lưu/khôi phục trận.
+
+Backend NestJS chưa triển khai. Workspace rules đã có kiểu dữ liệu, thế khai cuộc, hình học bảy quân, kiểm tra chiếu và an toàn của Tướng, xác thực nước đi, liệt kê nước hợp lệ và xác định kết thúc trận. Đây là luật đã hỗ trợ cho bản thử, chưa phải toàn bộ luật thi đấu: chưa hỗ trợ hòa thỏa thuận, lặp thế, chiếu dai/đuổi dai.
 
 ## Cài đặt và chạy frontend
 
@@ -35,8 +39,8 @@ Lệnh `dev:web` ở gốc gọi script `dev` của workspace `@xiangqi/web`, ch
 ## Cấu trúc và vai trò
 
 - `apps/web` (`@xiangqi/web`): frontend Next.js, giao diện chơi trên máy tính và điện thoại.
-- `apps/server` (`@xiangqi/server`): backend NestJS, quản lý phòng, lưu trạng thái trận và xác thực nước đi.
-- `packages/rules` (`@xiangqi/rules`): bộ luật và kiểu dữ liệu TypeScript dùng chung cho frontend và backend. Backend luôn xác thực nước đi và quyết định tính hợp lệ.
+- `apps/server` (`@xiangqi/server`): workspace dự kiến cho NestJS quản lý phòng, lưu trạng thái trận và xác thực nước đi; hiện chỉ có khung package.
+- `packages/rules` (`@xiangqi/rules`): bộ luật TypeScript thuần, đang được frontend dùng; sẽ dùng chung với backend và backend sẽ xác thực nước đi khi triển khai chơi qua mạng.
 
 `package.json` gốc khai báo các workspace; mỗi workspace có `package.json` riêng. Dự án dùng npm workspaces, chưa dùng Nx hoặc Turborepo.
 
@@ -46,7 +50,9 @@ Lệnh `dev:web` ở gốc gọi script `dev` của workspace `@xiangqi/web`, ch
 
 Package cũng export bảy hàm trả về `boolean`: `canRookMoveByGeometry`, `canCannonMoveByGeometry`, `canHorseMoveByGeometry`, `canElephantMoveByGeometry`, `canAdvisorMoveByGeometry`, `canGeneralMoveByGeometry`, `canSoldierMoveByGeometry`. Mỗi hàm nhận `readonly Piece[]`, ID quân và điểm đến `{ row: number; col: number }`, không thay đổi dữ liệu đầu vào.
 
-Các hàm chỉ kiểm tra hình học, vật cản/ngòi/chân/mắt nếu có, vùng bàn của quân và phe tại điểm đích. Giả định danh sách quân đầu vào hợp lệ (ID/vị trí không trùng, vị trí trong bàn). Chưa xét lượt, chiếu, điểm bị tấn công, an toàn của Tướng, hai Tướng đối mặt hoặc kết thúc trận; Tướng không có nước ăn xa. Kết quả `true` chưa đồng nghĩa với nước đi hợp lệ toàn trận. Frontend chưa dùng các hàm này để di chuyển quân.
+Các hàm hình học chỉ kiểm tra hình học, vật cản/ngòi/chân/mắt nếu có, vùng bàn của quân và phe tại điểm đích. Giả định danh sách quân đầu vào hợp lệ (ID/vị trí không trùng, vị trí trong bàn). Riêng các hàm hình học chưa xét lượt, chiếu, an toàn của Tướng hoặc kết thúc trận; Tướng không có nước ăn xa.
+
+API cấp cao gồm `canPieceMoveByGeometry` (điều phối bảy quân), `isInCheck` (đe dọa hình học và hai Tướng đối mặt), `isLegalMove` (đúng phe, hình học, mô phỏng và an toàn của Tướng; cấm ăn mất Tướng), `getLegalMoves` (danh sách `LegalMove`) và `getGameStatus` (đang chơi hoặc kết thúc với bên thắng/thua và lý do). Các API kiểm tra chiếu/nước hợp lệ/trạng thái yêu cầu đúng một Tướng mỗi phe, thiếu/trùng sẽ báo lỗi. Không sửa dữ liệu đầu vào; không dùng việc ăn mất Tướng để kết thúc trận.
 
 Chạy toàn bộ test rules từ gốc repository:
 
@@ -65,11 +71,11 @@ const pieces: Piece[] = createInitialPieces();
 
 Mỗi lần gọi tạo mảng 32 quân mới, gồm cả đối tượng quân và `position` mới; ID ổn định giữa các lần gọi. Không export một mảng mutable dùng chung giữa các trận.
 
-Frontend khai báo dependency nội bộ `"@xiangqi/rules": "*"`. Khi chạy `npm.cmd install` tại gốc, npm liên kết workspace trong repository. Next.js dùng `transpilePackages` trong `apps/web/next.config.ts` để biên dịch mã TypeScript của rules, chưa cần build riêng package. Component bàn cờ dùng `useMemo` để giữ dữ liệu khi lựa chọn thay đổi; state chỉ lưu ID quân đang chọn.
+Frontend khai báo dependency nội bộ `"@xiangqi/rules": "*"`. Khi chạy `npm.cmd install` tại gốc, npm liên kết workspace trong repository. Next.js dùng `transpilePackages` trong `apps/web/next.config.ts` để biên dịch mã TypeScript của rules, chưa cần build riêng package. Bàn local dùng state chung cho danh sách quân, lượt, ID đang chọn, nước vừa đi và thông báo; khởi tạo lười bằng dữ liệu mới. Trạng thái trận được suy ra bằng `useMemo` theo bàn/lượt, không tính lại khi chỉ chọn quân hoặc đổi focus.
 
-Khi triển khai NestJS, cần cấu hình backend biên dịch/nạp package TypeScript này (hoặc bổ sung đầu ra JavaScript cho rules) trong nhiệm vụ riêng. Hiện chưa kiểm chứng việc dùng rules trên backend và chưa triển khai xác thực nước đi.
+Khi triển khai NestJS, cần cấu hình backend biên dịch/nạp package TypeScript này (hoặc bổ sung đầu ra JavaScript cho rules) trong nhiệm vụ riêng. Hiện chưa kiểm chứng việc dùng rules trên backend; xác thực nước đi hiện chạy tại frontend local.
 
-## Phạm vi V1
+## Phạm vi V1 đã thống nhất (gồm các phần chưa triển khai)
 
 - Web chơi được trên máy tính và điện thoại.
 - Người chơi nhập biệt danh, tạo phòng hoặc vào phòng bằng mã.
@@ -79,6 +85,14 @@ Khi triển khai NestJS, cần cấu hình backend biên dịch/nạp package Ty
 - Server lưu trạng thái phòng và trận trong bộ nhớ; khởi động lại server sẽ mất phòng và trận đang lưu.
 - Bàn cờ dùng ký hiệu trước; nhân vật 2D sẽ được bổ sung sau.
 - Bản thử chưa hỗ trợ luật lặp thế, chiếu dai/đuổi dai.
+
+## Kiểm tra kết thúc trận trong development (tạm thời)
+
+Chạy `npm.cmd run dev:web`, mở `/dev/endgame/checkmate` hoặc `/dev/endgame/stalemate` trên địa chỉ server được terminal thông báo. Hai trang dùng fixture đã kiểm tra trong rules, đều có Đen đến lượt và Đỏ thắng. Route sai hoặc môi trường production trả 404. Trang `/` vẫn khởi tạo khai cuộc bình thường.
+
+Kiểm tra thông báo lý do thắng, bấm/Enter/Space không làm đổi trận đã kết thúc, Tab và mũi tên vẫn xem được bàn. Bấm “Ván mới” phải trở về 32 quân khai cuộc, Đỏ đi trước, không hỏi xác nhận và focus về nút; fixture không tự nạp lại sau reset. Thử thêm ở chiều rộng 375px. Tải lại trang fixture để nạp lại thế kiểm tra.
+
+Để loại bỏ hỗ trợ này: xóa `apps/web/src/dev/endgame-fixtures.ts` và `apps/web/src/app/dev/endgame/[scenario]/page.tsx`; bỏ interface/prop `initialGame` và phần sao chép prop trong `XiangqiBoard.tsx`, trả initializer về `useState(createLocalGame)`. Không sửa rules hoặc nút “Ván mới”.
 
 ## Kiểm tra workspace
 

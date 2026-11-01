@@ -42,18 +42,20 @@ h1 {
 }
 .piece {
   color: #262626;
+  pointer-events: none;
+}
+.board-intersection {
   cursor: pointer;
   outline: none;
 }
-.piece-focus-ring {
-  fill: none;
-  stroke: #245b91;
+.intersection-hit-area {
+  fill: transparent;
+  stroke: transparent;
   stroke-width: 3;
-  visibility: hidden;
-  pointer-events: none;
+  pointer-events: all;
 }
-.piece:focus-visible .piece-focus-ring {
-  visibility: visible;
+.board-intersection:focus-visible .intersection-hit-area {
+  stroke: #245b91;
 }
 .piece-selection {
   fill: none;
@@ -62,12 +64,55 @@ h1 {
   stroke-dasharray: 7 3;
   pointer-events: none;
 }
-.selection-description {
-  margin: 1rem 0 0;
-  min-height: 3em;
+.game-status {
+  margin-bottom: 1rem;
   line-height: 1.5;
   text-align: center;
   overflow-wrap: anywhere;
+}
+.game-status p {
+  margin: 0.25rem 0;
+}
+.board-actions {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 1rem;
+}
+.new-game-button {
+  min-height: 44px;
+  padding: 0.625rem 1.25rem;
+  border: 1px solid #80623d;
+  border-radius: 6px;
+  background: #fff8e9;
+  color: #29251f;
+  font: inherit;
+  cursor: pointer;
+}
+.new-game-button:focus-visible {
+  outline: 3px solid #245b91;
+  outline-offset: 3px;
+}
+.check-warning {
+  color: #a52121;
+  font-weight: 700;
+}
+.last-move {
+  fill: none;
+  stroke: #245b91;
+  stroke-width: 3;
+  pointer-events: none;
+}
+.last-move-from {
+  fill: #e4edf5;
+}
+.last-move-to {
+  stroke-dasharray: 4 3;
+}
+.board-help {
+  margin: 0.75rem 0;
+  text-align: center;
+  font-size: 0.875rem;
+  line-height: 1.5;
 }
 .piece-body {
   fill: #fff8e9;

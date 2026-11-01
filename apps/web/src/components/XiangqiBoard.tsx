@@ -74,7 +74,7 @@ export default function XiangqiBoard() {
             }
           }}
         >
-          <title>{labels[piece.type]} {piece.side === "black" ? "Đen" : "Đỏ"}, hàng {piece.position.row}, cột {piece.position.col}</title>
+          <title>{`${labels[piece.type]} ${piece.side === "black" ? "Đen" : "Đỏ"}, hàng ${piece.position.row}, cột ${piece.position.col}`}</title>
           <circle className="piece-focus-ring" r="30" aria-hidden="true" />
           {selectedPieceId === piece.id && (
             <rect className="piece-selection" x="-29" y="-29" width="58" height="58" rx="6" aria-hidden="true" />

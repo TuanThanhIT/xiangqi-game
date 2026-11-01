@@ -1,0 +1,17 @@
+# Dependencies
+node_modules/
+
+# Build output and test coverage
+.next/
+dist/
+coverage/
+
+# Logs
+logs/
+*.log
+*.log.*
+
+# Local environment files; keep the example template
+.env
+.env.*
+!.env.example

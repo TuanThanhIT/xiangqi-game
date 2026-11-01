@@ -10,7 +10,7 @@ Trận kết thúc khi bên đến lượt hết nước hợp lệ: bị chiế
 
 Trạng thái local chỉ nằm trong bộ nhớ trình duyệt, tải lại trang sẽ mất ván. Chưa có chơi qua mạng hoặc lưu/khôi phục trận.
 
-Backend NestJS đã có endpoint `GET /health` tại cổng 3001; chưa có phòng chơi, WebSocket, CORS, database hoặc tích hợp rules. Workspace rules đã có kiểu dữ liệu, thế khai cuộc, hình học bảy quân, kiểm tra chiếu và an toàn của Tướng, xác thực nước đi, liệt kê nước hợp lệ và xác định kết thúc trận. Đây là luật đã hỗ trợ cho bản thử, chưa phải toàn bộ luật thi đấu: chưa hỗ trợ hòa thỏa thuận, lặp thế, chiếu dai/đuổi dai.
+Backend NestJS có `GET /health` và API tạo/vào phòng trong bộ nhớ tại cổng 3001; chưa có WebSocket, CORS, database hoặc tích hợp rules. Workspace rules đã có kiểu dữ liệu, thế khai cuộc, hình học bảy quân, kiểm tra chiếu và an toàn của Tướng, xác thực nước đi, liệt kê nước hợp lệ và xác định kết thúc trận. Đây là luật đã hỗ trợ cho bản thử, chưa phải toàn bộ luật thi đấu: chưa hỗ trợ hòa thỏa thuận, lặp thế, chiếu dai/đuổi dai.
 
 ## Cài đặt và chạy frontend
 
@@ -69,10 +69,54 @@ Gọi lại `/health` bằng lệnh trên, rồi `Ctrl+C` để dừng. Build x�
 
 `main.ts` tạo ứng dụng từ `AppModule` và mở cổng; `AppModule` đăng ký `HealthController`; controller nhận `GET /health` và trả object để Nest chuyển thành JSON. Chưa cần service riêng.
 
+## API phòng trong bộ nhớ
+
+Gửi `Content-Type: application/json` với body chỉ có `{"nickname":"  Người chơi  "}`. Backend kiểm tra runtime, trim và nhận 1–30 Unicode code point; không ép kiểu hoặc nhận trường thừa.
+
+- `POST /rooms`: HTTP 201, cấp ghế Đỏ.
+- `POST /rooms/:code/join`: HTTP 200, cấp ghế Đen nếu còn trống.
+
+Response mẫu (token đã che):
+
+```json
+{
+  "roomCode": "ABC234",
+  "seat": "red",
+  "nickname": "Người chơi",
+  "seatToken": "<token-riêng-của-ghế>"
+}
+```
+
+Join có cùng cấu trúc response với `seat: "black"`. Response chứa token đặt `Cache-Control: no-store`; chỉ trả token của chính ghế được cấp, không trả object phòng nội bộ. Không log token, body hoặc response nhạy cảm. Token là bí mật của ghế; bước này chưa có endpoint dùng token để xác thực.
+
+Mã phòng gồm 6 ký tự trong `ABCDEFGHJKLMNPQRSTUVWXYZ23456789`, sinh bằng crypto; trùng thử lại tối đa 20 lần. Token dùng 32 byte ngẫu nhiên, mã hóa base64url. Mã không được tự điều khiển từ request hoặc cấu hình công khai.
+
+Lỗi có dạng `{"statusCode":409,"code":"ROOM_FULL","message":"Phòng đã đủ hai người."}`:
+
+| HTTP | Code | Ý nghĩa |
+|---|---|---|
+| 400 | INVALID_REQUEST | Body/biệt danh sai |
+| 400 | INVALID_ROOM_CODE | Mã sai định dạng |
+| 400 | INVALID_JSON | Lỗi cú pháp JSON đã được parser nhận diện |
+| 404 | ROOM_NOT_FOUND | Phòng không tồn tại |
+| 409 | ROOM_FULL | Ghế Đen đã được giữ |
+| 503 | ROOM_CODE_UNAVAILABLE | Hết 20 lần thử mã |
+| 500 | INTERNAL_ERROR | Lỗi bất ngờ, không trả stack hoặc chi tiết nội bộ |
+
+Controller định tuyến HTTP; pipe xác thực body/mã; service giữ Map và thực hiện tạo/join. Join không có `await` giữa kiểm tra và ghi ghế, nên trong một process chỉ một request chiếm được ghế Đen. Chưa hỗ trợ nhiều process/server, reconnect, hết hạn/dọn phòng, chống spam hoặc giới hạn số phòng. Khởi động lại server mất toàn bộ phòng. Chưa tạo bàn cờ, endpoint xem phòng, WebSocket, database hoặc tích hợp frontend/rules.
+
+Chạy test backend từ gốc:
+
+```powershell
+npm.cmd run test --workspace=@xiangqi/server
+```
+
+Test dùng TypeScript/CommonJS, `node:test`, `node:assert/strict` và fetch có sẵn, không thêm dependency. Runner xóa `.test-output` trước biên dịch; output được Git bỏ qua. Test HTTP dùng cổng ngẫu nhiên và đóng app trong `finally`, gồm test hai join cạnh tranh.
+
 ## Cấu trúc và vai trò
 
 - `apps/web` (`@xiangqi/web`): frontend Next.js, giao diện chơi trên máy tính và điện thoại.
-- `apps/server` (`@xiangqi/server`): NestJS tối thiểu với endpoint health; quản lý phòng, trạng thái trận và xác thực nước đi sẽ được triển khai sau.
+- `apps/server` (`@xiangqi/server`): NestJS với health và phòng hai ghế trong bộ nhớ; chưa có bàn cờ hoặc xác thực nước đi trên server.
 - `packages/rules` (`@xiangqi/rules`): bộ luật TypeScript thuần, đang được frontend dùng; sẽ dùng chung với backend và backend sẽ xác thực nước đi khi triển khai chơi qua mạng.
 
 `package.json` gốc khai báo các workspace; mỗi workspace có `package.json` riêng. Dự án dùng npm workspaces, chưa dùng Nx hoặc Turborepo.

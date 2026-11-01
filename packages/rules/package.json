@@ -1,4 +1,13 @@
 {
   "name": "@xiangqi/rules",
-  "private": true
+  "private": true,
+  "scripts": {
+    "test": "node scripts/test.mjs"
+  },
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  }
 }

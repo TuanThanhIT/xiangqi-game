@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { initialPieces } from "@/features/board/initial-position";
-import type { PieceType } from "@/features/board/types";
+import { useMemo, useState } from "react";
+import { createInitialPieces } from "@xiangqi/rules";
+import type { PieceType } from "@xiangqi/rules";
 
 const STEP = 60;
 const PADDING = 36;
@@ -14,6 +14,7 @@ const labels: Record<PieceType, string> = {
 };
 
 export default function XiangqiBoard() {
+  const initialPieces = useMemo(() => createInitialPieces(), []);
   const [selectedPieceId, setSelectedPieceId] = useState<string | null>(null);
   const selectedPiece = initialPieces.find((piece) => piece.id === selectedPieceId);
 

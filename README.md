@@ -4,9 +4,9 @@ Dự án web cờ tướng để vừa học lập trình vừa triển khai th�
 
 ## Trạng thái hiện tại
 
-Frontend Next.js đã được khởi tạo với TypeScript, App Router, thư mục `src`, ESLint và CSS thông thường. Trang chủ chỉ hiển thị giới thiệu và trạng thái phát triển, chưa có chức năng chơi cờ.
+Frontend Next.js dùng TypeScript, App Router, thư mục `src`, ESLint và CSS thông thường. Trang chủ hiển thị bàn cờ SVG khai cuộc và hỗ trợ chọn/bỏ chọn quân bằng chuột, chạm hoặc bàn phím; chưa có chức năng đi quân.
 
-Backend NestJS và bộ luật TypeScript chưa triển khai; hai workspace này hiện chỉ có `package.json` tối thiểu.
+Backend NestJS chưa triển khai. Workspace rules đã có kiểu dữ liệu quân cờ, hàm tạo thế khai cuộc và kiểm tra hình học cho đủ bảy loại quân; chưa kiểm tra tính hợp lệ toàn trận.
 
 ## Cài đặt và chạy frontend
 
@@ -39,6 +39,35 @@ Lệnh `dev:web` ở gốc gọi script `dev` của workspace `@xiangqi/web`, ch
 - `packages/rules` (`@xiangqi/rules`): bộ luật và kiểu dữ liệu TypeScript dùng chung cho frontend và backend. Backend luôn xác thực nước đi và quyết định tính hợp lệ.
 
 `package.json` gốc khai báo các workspace; mỗi workspace có `package.json` riêng. Dự án dùng npm workspaces, chưa dùng Nx hoặc Turborepo.
+
+## Dùng package rules
+
+`@xiangqi/rules` là TypeScript thuần, không phụ thuộc React, Next.js, NestJS hoặc DOM. Package export các kiểu `Side`, `PieceType`, `Row`, `Col`, `Piece` và hàm `createInitialPieces()` qua `src/index.ts`.
+
+Package cũng export bảy hàm trả về `boolean`: `canRookMoveByGeometry`, `canCannonMoveByGeometry`, `canHorseMoveByGeometry`, `canElephantMoveByGeometry`, `canAdvisorMoveByGeometry`, `canGeneralMoveByGeometry`, `canSoldierMoveByGeometry`. Mỗi hàm nhận `readonly Piece[]`, ID quân và điểm đến `{ row: number; col: number }`, không thay đổi dữ liệu đầu vào.
+
+Các hàm chỉ kiểm tra hình học, vật cản/ngòi/chân/mắt nếu có, vùng bàn của quân và phe tại điểm đích. Giả định danh sách quân đầu vào hợp lệ (ID/vị trí không trùng, vị trí trong bàn). Chưa xét lượt, chiếu, điểm bị tấn công, an toàn của Tướng, hai Tướng đối mặt hoặc kết thúc trận; Tướng không có nước ăn xa. Kết quả `true` chưa đồng nghĩa với nước đi hợp lệ toàn trận. Frontend chưa dùng các hàm này để di chuyển quân.
+
+Chạy toàn bộ test rules từ gốc repository:
+
+```powershell
+npm.cmd run test --workspace=@xiangqi/rules
+```
+
+Runner dùng TypeScript và kiểu Node đã có trong repository, xóa `.test-output` cũ trước khi biên dịch CommonJS rồi chạy `node:test`. Output tạm được Git bỏ qua; không có framework test bổ sung.
+
+```typescript
+import { createInitialPieces } from "@xiangqi/rules";
+import type { Piece } from "@xiangqi/rules";
+
+const pieces: Piece[] = createInitialPieces();
+```
+
+Mỗi lần gọi tạo mảng 32 quân mới, gồm cả đối tượng quân và `position` mới; ID ổn định giữa các lần gọi. Không export một mảng mutable dùng chung giữa các trận.
+
+Frontend khai báo dependency nội bộ `"@xiangqi/rules": "*"`. Khi chạy `npm.cmd install` tại gốc, npm liên kết workspace trong repository. Next.js dùng `transpilePackages` trong `apps/web/next.config.ts` để biên dịch mã TypeScript của rules, chưa cần build riêng package. Component bàn cờ dùng `useMemo` để giữ dữ liệu khi lựa chọn thay đổi; state chỉ lưu ID quân đang chọn.
+
+Khi triển khai NestJS, cần cấu hình backend biên dịch/nạp package TypeScript này (hoặc bổ sung đầu ra JavaScript cho rules) trong nhiệm vụ riêng. Hiện chưa kiểm chứng việc dùng rules trên backend và chưa triển khai xác thực nước đi.
 
 ## Phạm vi V1
 

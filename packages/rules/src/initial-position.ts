@@ -1,6 +1,5 @@
 import type { Col, Piece, PieceType, Side } from "./types";
 
-// Dữ liệu tạm ở frontend; sẽ chuyển sang packages/rules khi triển khai bộ luật.
 const backRank: readonly PieceType[] = [
   "rook", "horse", "elephant", "advisor", "general",
   "advisor", "elephant", "horse", "rook",
@@ -24,6 +23,6 @@ function createSide(side: Side): Piece[] {
   ];
 }
 
-export const initialPieces: readonly Piece[] = [
-  ...createSide("black"), ...createSide("red"),
-];
+export function createInitialPieces(): Piece[] {
+  return [...createSide("black"), ...createSide("red")];
+}

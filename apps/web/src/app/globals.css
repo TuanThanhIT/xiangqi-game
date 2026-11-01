@@ -1,0 +1,92 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #faf7f0;
+  color: #29251f;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+main {
+  width: min(100%, 38rem);
+  margin-inline: auto;
+  padding: clamp(0.75rem, 3vw, 1.5rem);
+}
+
+h1 {
+  margin: 0 0 1rem;
+  text-align: center;
+  font-size: clamp(1.5rem, 6vw, 2rem);
+  line-height: 1.2;
+}
+
+.xiangqi-board {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.board-surface {
+  fill: #efdab1;
+}
+.board-lines {
+  fill: none;
+  stroke: #80623d;
+  stroke-width: 1.5;
+}
+.river-label {
+  fill: #725637;
+  font-size: 19px;
+  letter-spacing: 6px;
+}
+.piece {
+  color: #262626;
+  cursor: pointer;
+  outline: none;
+}
+.piece-focus-ring {
+  fill: none;
+  stroke: #245b91;
+  stroke-width: 3;
+  visibility: hidden;
+  pointer-events: none;
+}
+.piece:focus-visible .piece-focus-ring {
+  visibility: visible;
+}
+.piece-selection {
+  fill: none;
+  stroke: #29251f;
+  stroke-width: 2.5;
+  stroke-dasharray: 7 3;
+  pointer-events: none;
+}
+.selection-description {
+  margin: 1rem 0 0;
+  min-height: 3em;
+  line-height: 1.5;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+.piece-body {
+  fill: #fff8e9;
+  stroke: currentColor;
+  stroke-width: 2;
+}
+.piece--black .piece-body {
+  stroke-dasharray: 5 3;
+}
+.piece--red {
+  color: #a52121;
+}
+.piece-inner-ring {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1;
+}
+.piece text {
+  fill: currentColor;
+  font-size: 13px;
+  font-weight: 700;
+}

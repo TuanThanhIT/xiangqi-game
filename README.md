@@ -4,7 +4,33 @@ Dự án web cờ tướng để vừa học lập trình vừa triển khai th�
 
 ## Trạng thái hiện tại
 
-Hiện tại mới có bộ khung workspace và tài liệu, chưa có ứng dụng để chạy. Chưa khởi tạo Next.js/NestJS, chưa cài dependency và chưa có logic game hoặc lệnh chạy/build.
+Frontend Next.js đã được khởi tạo với TypeScript, App Router, thư mục `src`, ESLint và CSS thông thường. Trang chủ chỉ hiển thị giới thiệu và trạng thái phát triển, chưa có chức năng chơi cờ.
+
+Backend NestJS và bộ luật TypeScript chưa triển khai; hai workspace này hiện chỉ có `package.json` tối thiểu.
+
+## Cài đặt và chạy frontend
+
+Yêu cầu Node.js từ 20.9 trở lên cho Next.js 16.4.3. Máy hiện tại dùng Node.js v22.17.0. Xem [tài liệu cài đặt Next.js](https://nextjs.org/docs/app/getting-started/installation).
+
+Chạy tại thư mục gốc repository trên Windows:
+
+```powershell
+npm.cmd install
+npm.cmd run dev:web
+```
+
+Mở `http://localhost:3000` (hoặc cổng được terminal thông báo). Nhấn `Ctrl+C` để dừng server.
+
+Dự án dùng một `package-lock.json` tại gốc. Không cài dependency riêng trong `apps/web`.
+
+Kiểm tra frontend từ thư mục gốc:
+
+```powershell
+npm.cmd run lint --workspace=@xiangqi/web
+npm.cmd run build --workspace=@xiangqi/web
+```
+
+Lệnh `dev:web` ở gốc gọi script `dev` của workspace `@xiangqi/web`, chạy `next dev`. App Router dùng `apps/web/src/app/layout.tsx` làm khung trang và `apps/web/src/app/page.tsx` làm nội dung trang chủ. File `globals.css` chứa CSS chung; alias `@/*` trỏ tới `apps/web/src/*`.
 
 ## Cấu trúc và vai trò
 

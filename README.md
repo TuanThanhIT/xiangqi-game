@@ -10,7 +10,7 @@ Trận kết thúc khi bên đến lượt hết nước hợp lệ: bị chiế
 
 Trạng thái local chỉ nằm trong bộ nhớ trình duyệt, tải lại trang sẽ mất ván. Chưa có chơi qua mạng hoặc lưu/khôi phục trận.
 
-Backend NestJS có `GET /health` và API tạo/vào phòng trong bộ nhớ tại cổng 3001; chưa có WebSocket, CORS, database hoặc tích hợp rules. Workspace rules đã có kiểu dữ liệu, thế khai cuộc, hình học bảy quân, kiểm tra chiếu và an toàn của Tướng, xác thực nước đi, liệt kê nước hợp lệ và xác định kết thúc trận. Đây là luật đã hỗ trợ cho bản thử, chưa phải toàn bộ luật thi đấu: chưa hỗ trợ hòa thỏa thuận, lặp thế, chiếu dai/đuổi dai.
+Backend NestJS có `GET /health`, API tạo/vào phòng trong bộ nhớ và Socket.IO xác thực ghế/trạng thái kết nối tại cổng 3001. Có allowlist origin riêng cho Socket.IO; chưa bật CORS cho HTTP API, chưa có database hoặc tích hợp rules. Workspace rules đã có kiểu dữ liệu, thế khai cuộc, hình học bảy quân, kiểm tra chiếu và an toàn của Tướng, xác thực nước đi, liệt kê nước hợp lệ và xác định kết thúc trận. Đây là luật đã hỗ trợ cho bản thử, chưa phải toàn bộ luật thi đấu: chưa hỗ trợ hòa thỏa thuận, lặp thế, chiếu dai/đuổi dai.
 
 ## Cài đặt và chạy frontend
 
@@ -103,7 +103,7 @@ Lỗi có dạng `{"statusCode":409,"code":"ROOM_FULL","message":"Phòng đã đ
 | 503 | ROOM_CODE_UNAVAILABLE | Hết 20 lần thử mã |
 | 500 | INTERNAL_ERROR | Lỗi bất ngờ, không trả stack hoặc chi tiết nội bộ |
 
-Controller định tuyến HTTP; pipe xác thực body/mã; service giữ Map và thực hiện tạo/join. Join không có `await` giữa kiểm tra và ghi ghế, nên trong một process chỉ một request chiếm được ghế Đen. Chưa hỗ trợ nhiều process/server, reconnect, hết hạn/dọn phòng, chống spam hoặc giới hạn số phòng. Khởi động lại server mất toàn bộ phòng. Chưa tạo bàn cờ, endpoint xem phòng, WebSocket, database hoặc tích hợp frontend/rules.
+Controller định tuyến HTTP; pipe xác thực body/mã; service giữ Map và thực hiện tạo/join. Join không có `await` giữa kiểm tra và ghi ghế, nên trong một process chỉ một request chiếm được ghế Đen. Chưa hỗ trợ nhiều process/server, phục hồi phiên, hết hạn/dọn phòng, chống spam hoặc giới hạn số phòng. Khởi động lại server mất toàn bộ phòng. Chưa tạo bàn cờ, endpoint xem phòng, database hoặc tích hợp frontend/rules. Socket.IO chỉ đồng bộ trạng thái công khai của phòng như phần dưới.
 
 Chạy test backend từ gốc:
 
@@ -112,6 +112,27 @@ npm.cmd run test --workspace=@xiangqi/server
 ```
 
 Test dùng TypeScript/CommonJS, `node:test`, `node:assert/strict` và fetch có sẵn, không thêm dependency. Runner xóa `.test-output` trước biên dịch; output được Git bỏ qua. Test HTTP dùng cổng ngẫu nhiên và đóng app trong `finally`, gồm test hai join cạnh tranh.
+
+## Socket.IO cho trạng thái phòng
+
+Backend cổng 3001 có namespace `/rooms`, path `/socket.io`. Runtime dùng `@nestjs/websockets` và `@nestjs/platform-socket.io` 12.3.2, `socket.io` 4.8.4; test dùng `socket.io-client` 4.8.4.
+
+Handshake chỉ nhận `auth: { roomCode, seatToken }`. Không đặt token trong URL/query, log hoặc event. Server xác thực token bằng dữ liệu RoomsService, tự xác định phe/biệt danh; khai thêm `seat` hoặc `nickname` bị từ chối. Không bật connection state recovery bỏ qua xác thực.
+
+Event server:
+
+- `room:session`: gửi riêng `{ roomCode, seat }` sau xác thực và join thành công.
+- `room:state`: gửi snapshot `{ roomCode, players: { red, black } }`. Mỗi ghế là `{ nickname, side, connected }`, ghế Đen chưa giữ là `null`. Không chứa token, socket ID hoặc object phòng nội bộ.
+- `room:replaced`: `{ code: "SEAT_REPLACED", message }` gửi socket cũ, sau đó server ngắt socket đó. Tab cũ không nên tự kết nối lại để tranh ghế.
+- `connect_error`: lỗi handshake với `error.data = { code, message }`; code là `INVALID_HANDSHAKE`, `AUTH_FAILED` hoặc `INTERNAL_ERROR`. Phòng không tồn tại và token không khớp dùng chung lỗi xác thực.
+
+Socket mới xác thực hợp lệ thay socket cũ. Mỗi ghế chỉ lưu một activeSocketId trong Map RoomsService; disconnect chỉ đánh offline nếu ID còn khớp. Gateway kiểm tra quyền sau các bước chờ, loại socket mất quyền khỏi room và không gửi session muộn. Socket.IO chỉ dùng registry kết nối của nó, không có Map phòng nghiệp vụ thứ hai.
+
+Khi Đen join qua HTTP, RoomsService phát thông báo nội bộ chỉ chứa mã phòng; gateway lấy snapshot công khai và gửi cho người Đỏ online. Listener được gỡ khi app đóng. Khi mất kết nối có thể xác thực lại bằng token cũ; chưa có phục hồi phiên, replay sự kiện, thu hồi/đổi token hoặc khôi phục sau restart.
+
+Development chỉ cho Origin `http://localhost:3000` và `http://127.0.0.1:3000`. CORS riêng Socket.IO và allowRequest chặn Origin sai/thiếu trên cả polling/WebSocket; không dùng wildcard hoặc mở CORS cho HTTP API. Test Node phải gửi Origin hợp lệ. Origin không thay thế token xác thực; chưa cấu hình cho IP LAN/cổng khác hoặc production.
+
+Test backend hiện có chạy cả HTTP và socket: xác thực, phòng cách ly, join HTTP cập nhật online, connect/disconnect, thay socket/reconnect/cạnh tranh, payload không token và origin. Các lần chờ có timeout; test đóng client/app kể cả khi thất bại. Bước này chưa làm frontend, bàn cờ/nước đi, database, nhiều process, hết hạn/dọn phòng hoặc chống spam.
 
 ## Cấu trúc và vai trò
 

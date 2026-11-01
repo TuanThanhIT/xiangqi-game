@@ -1,7 +1,8 @@
 {
   "private": true,
   "scripts": {
-    "dev:web": "npm run dev --workspace=@xiangqi/web"
+    "dev:web": "npm run dev --workspace=@xiangqi/web",
+    "dev:server": "npm run dev --workspace=@xiangqi/server"
   },
   "workspaces": [
     "apps/*",

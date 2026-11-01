@@ -10,7 +10,7 @@ Trận kết thúc khi bên đến lượt hết nước hợp lệ: bị chiế
 
 Trạng thái local chỉ nằm trong bộ nhớ trình duyệt, tải lại trang sẽ mất ván. Chưa có chơi qua mạng hoặc lưu/khôi phục trận.
 
-Backend NestJS chưa triển khai. Workspace rules đã có kiểu dữ liệu, thế khai cuộc, hình học bảy quân, kiểm tra chiếu và an toàn của Tướng, xác thực nước đi, liệt kê nước hợp lệ và xác định kết thúc trận. Đây là luật đã hỗ trợ cho bản thử, chưa phải toàn bộ luật thi đấu: chưa hỗ trợ hòa thỏa thuận, lặp thế, chiếu dai/đuổi dai.
+Backend NestJS đã có endpoint `GET /health` tại cổng 3001; chưa có phòng chơi, WebSocket, CORS, database hoặc tích hợp rules. Workspace rules đã có kiểu dữ liệu, thế khai cuộc, hình học bảy quân, kiểm tra chiếu và an toàn của Tướng, xác thực nước đi, liệt kê nước hợp lệ và xác định kết thúc trận. Đây là luật đã hỗ trợ cho bản thử, chưa phải toàn bộ luật thi đấu: chưa hỗ trợ hòa thỏa thuận, lặp thế, chiếu dai/đuổi dai.
 
 ## Cài đặt và chạy frontend
 
@@ -36,10 +36,43 @@ npm.cmd run build --workspace=@xiangqi/web
 
 Lệnh `dev:web` ở gốc gọi script `dev` của workspace `@xiangqi/web`, chạy `next dev`. App Router dùng `apps/web/src/app/layout.tsx` làm khung trang và `apps/web/src/app/page.tsx` làm nội dung trang chủ. File `globals.css` chứa CSS chung; alias `@/*` trỏ tới `apps/web/src/*`.
 
+## Chạy và kiểm tra backend
+
+Backend dùng NestJS 12.3.2, CommonJS, được tạo thủ công; không cần Nest CLI. Node.js 22.17.0 hiện tại đáp ứng yêu cầu runtime. Cài dependency từ gốc bằng `npm.cmd install`, giữ duy nhất `package-lock.json` ở gốc.
+
+Từ thư mục gốc, chạy:
+
+```powershell
+npm.cmd run typecheck --workspace=@xiangqi/server
+npm.cmd run build --workspace=@xiangqi/server
+npm.cmd run dev:server
+```
+
+Development dùng nodemon và ts-node, tự khởi động lại khi sửa `apps/server/src`. Backend lắng nghe cổng 3001; frontend giữ nguyên lệnh/cổng hiện có. Chạy hai ứng dụng ở hai terminal riêng nếu cần.
+
+Trong terminal khác, kiểm tra HTTP:
+
+```powershell
+$healthResponse = Invoke-WebRequest -UseBasicParsing http://localhost:3001/health
+$healthResponse.StatusCode
+$healthResponse.Headers['Content-Type']
+$healthResponse.Content
+```
+
+Kỳ vọng HTTP `200`, Content-Type JSON và nội dung `{"status":"ok"}`. Nhấn `Ctrl+C` để dừng development trước khi chạy bản build:
+
+```powershell
+npm.cmd run start --workspace=@xiangqi/server
+```
+
+Gọi lại `/health` bằng lệnh trên, rồi `Ctrl+C` để dừng. Build xóa `apps/server/dist` cũ trước khi biên dịch để tránh sót JavaScript không còn trong src. Lỗi bootstrap được ghi ra console và process thoát với mã thất bại.
+
+`main.ts` tạo ứng dụng từ `AppModule` và mở cổng; `AppModule` đăng ký `HealthController`; controller nhận `GET /health` và trả object để Nest chuyển thành JSON. Chưa cần service riêng.
+
 ## Cấu trúc và vai trò
 
 - `apps/web` (`@xiangqi/web`): frontend Next.js, giao diện chơi trên máy tính và điện thoại.
-- `apps/server` (`@xiangqi/server`): workspace dự kiến cho NestJS quản lý phòng, lưu trạng thái trận và xác thực nước đi; hiện chỉ có khung package.
+- `apps/server` (`@xiangqi/server`): NestJS tối thiểu với endpoint health; quản lý phòng, trạng thái trận và xác thực nước đi sẽ được triển khai sau.
 - `packages/rules` (`@xiangqi/rules`): bộ luật TypeScript thuần, đang được frontend dùng; sẽ dùng chung với backend và backend sẽ xác thực nước đi khi triển khai chơi qua mạng.
 
 `package.json` gốc khai báo các workspace; mỗi workspace có `package.json` riêng. Dự án dùng npm workspaces, chưa dùng Nx hoặc Turborepo.

@@ -6,6 +6,9 @@ import { createRoomSocket } from "./room-socket";
 import { clearRoomSession, readRoomSession, saveRoomSession } from "./room-storage";
 import { isCode, isIdentity, isNickname, isReplaced, isSnapshot, isSocketError, record } from "./room-contract";
 import type { RoomIdentity, RoomSession, RoomSnapshot } from "./room-contract";
+import { OnlineGameSession } from "./online-game-session";
+import type { OnlineState } from "./online-game-session";
+import type { Piece } from "@xiangqi/rules";
 
 export function useRoomSession() {
   const [session, setSession] = useState<RoomSession | null>(null);
@@ -19,6 +22,9 @@ export function useRoomSession() {
   const busy = useRef(false);
   const requestController = useRef<AbortController | null>(null);
   const alive = useRef(false);
+  const gameSession = useRef<OnlineGameSession | null>(null);
+  const [online, setOnline] = useState<OnlineState>({ snapshot: null, synced: false, pending: null, message: "", recovery: false });
+  const [selectionEpoch, setSelectionEpoch] = useState(0);
 
   useEffect(() => {
     alive.current = true;
@@ -42,15 +48,31 @@ export function useRoomSession() {
     let active = true;
     let terminal = false;
     let verified = false;
+    let connectionGeneration = 0;
     let deadline: ReturnType<typeof setTimeout> | undefined;
     let socket: ReturnType<typeof createRoomSocket>;
     try { socket = createRoomSocket(session); } catch {
       queueMicrotask(() => { if (active) { setError("Chưa cấu hình địa chỉ backend Socket.IO hợp lệ."); setPhase("Lỗi cấu hình"); } });
       return () => { active = false; };
     }
+    const game = new OnlineGameSession(session.roomCode, session.seat, {
+      connected: () => active && !terminal && verified && socket.connected,
+      send: (request, callback) => {
+        // Volatile không buffer nước đi khi transport không sẵn sàng; controller quản lý retry.
+        if (active && !terminal && verified && socket.connected) socket.volatile.emit("game:move", request, callback);
+      },
+      change: (state) => { if (active && !terminal) setOnline(state); },
+      schedule: (callback, delay) => { const timer = setTimeout(callback, delay); return () => clearTimeout(timer); },
+      uuid: () => crypto.randomUUID(),
+      protocolError: () => stop("Dữ liệu trận không nhất quán. Hãy tải lại trang để đồng bộ.", false),
+    });
+    gameSession.current = game;
     function stop(message: string, revoke: boolean) {
       if (!active || terminal) return;
       terminal = true;
+      game.dispose();
+      setSelectionEpoch((value) => value + 1);
+      setOnline((state) => ({ ...state, synced: false, pending: null, recovery: true }));
       clearTimeout(deadline);
       socket.io.reconnection(false);
       socket.auth = {};
@@ -65,9 +87,14 @@ export function useRoomSession() {
     }
     function onConnect() {
       if (!active || terminal) return;
+      const generation = ++connectionGeneration;
       verified = false; setIdentity(null); setPhase("Đang xác thực ghế"); setError("");
       clearTimeout(deadline);
-      deadline = setTimeout(() => stop("Không nhận được xác nhận ghế đúng hạn. Hãy tải lại trang để thử kết nối lại bằng phiên đã lưu.", false), 8000);
+      deadline = setTimeout(() => {
+        if (active && !terminal && !verified && generation === connectionGeneration) {
+          stop("Không nhận được xác nhận ghế đúng hạn. Hãy tải lại trang để thử kết nối lại bằng phiên đã lưu.", false);
+        }
+      }, 8000);
     }
     function onSession(data: unknown) {
       if (!active || terminal) return;
@@ -75,6 +102,7 @@ export function useRoomSession() {
         stop("Server trả thông tin ghế không khớp phiên đã lưu.", true); return;
       }
       clearTimeout(deadline); verified = true; setIdentity(data); setPhase("Đã kết nối và xác thực"); setError("");
+      game.authenticatedNow();
     }
     function onState(data: unknown) {
       if (!active || terminal || !verified) return;
@@ -102,16 +130,22 @@ export function useRoomSession() {
     function onDisconnect(reason: string) {
       if (!active || terminal) return;
       clearTimeout(deadline); verified = false; setIdentity(null);
+      connectionGeneration++;
+      game.disconnected(); setSelectionEpoch((value) => value + 1);
       setPhase(reason === "io server disconnect" ? "Server đã ngắt kết nối; không tự chiếm lại ghế" : "Mất kết nối, đang thử lại");
     }
     function onAttempt() { if (active && !terminal) setPhase("Đang kết nối lại"); }
-    function onFailed() { if (active && !terminal) setPhase("Đã dừng thử kết nối; tải lại trang để thử lại phiên đã lưu"); }
+    function onFailed() { if (active && !terminal) { setPhase("Đã dừng thử kết nối; tải lại trang để thử lại phiên đã lưu"); game.reconnectFailed(); } }
+    function onGameState(data: unknown) { if (active && !terminal && verified) game.receiveSnapshot(data); }
     socket.on("connect", onConnect); socket.on("room:session", onSession); socket.on("room:state", onState);
+    socket.on("game:state", onGameState);
     socket.on("room:replaced", onReplaced); socket.on("connect_error", onConnectError); socket.on("disconnect", onDisconnect);
     socket.io.on("reconnect_attempt", onAttempt); socket.io.on("reconnect_failed", onFailed);
     socket.connect();
     return () => {
       active = false; clearTimeout(deadline);
+      game.dispose(); if (gameSession.current === game) gameSession.current = null;
+      socket.off("game:state", onGameState);
       socket.off("connect", onConnect); socket.off("room:session", onSession); socket.off("room:state", onState);
       socket.off("room:replaced", onReplaced); socket.off("connect_error", onConnectError); socket.off("disconnect", onDisconnect);
       socket.io.off("reconnect_attempt", onAttempt); socket.io.off("reconnect_failed", onFailed);
@@ -131,7 +165,9 @@ export function useRoomSession() {
       let saved = false;
       try { saved = saveRoomSession(window.sessionStorage, next); } catch { /* tiếp tục dùng trong bộ nhớ */ }
       setWarning(saved ? "" : "Không lưu được phiên. Nếu tải lại trang bạn có thể mất token của ghế này.");
-      setIdentity(null); setSnapshot(null); setPhase("Đang kết nối"); setSession(next);
+      setIdentity(null); setSnapshot(null); setPhase("Đang kết nối");
+      setOnline({ snapshot: null, synced: false, pending: null, message: "", recovery: false });
+      setSelectionEpoch((value) => value + 1); setSession(next);
     } catch (err: unknown) {
       if (alive.current && !controller.signal.aborted) setError(err instanceof Error ? err.message : "Không nhận được kết quả yêu cầu.");
     } finally {
@@ -140,5 +176,10 @@ export function useRoomSession() {
       if (requestController.current === controller) requestController.current = null;
     }
   }
-  return { session, identity, snapshot, ready, loading, phase, error, warning, submit };
+  function sendMove(pieceId: string, to: Piece["position"]): boolean {
+    return gameSession.current?.sendMove(pieceId, to) ?? false;
+  }
+  const canPlay = !!identity && online.synced && !online.pending && !online.recovery && !!online.snapshot?.playEnabled &&
+    online.snapshot.game?.result.status === "playing" && online.snapshot.game.sideToMove === identity.seat;
+  return { session, identity, snapshot, ready, loading, phase, error, warning, submit, online, canPlay, selectionEpoch, sendMove };
 }

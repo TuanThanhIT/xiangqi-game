@@ -8,9 +8,9 @@ Frontend Next.js dùng TypeScript, App Router, thư mục `src`, ESLint và CSS 
 
 Trận kết thúc khi bên đến lượt hết nước hợp lệ: bị chiếu là chiếu bí, không bị chiếu vẫn thua vì hết nước (không hòa như cờ vua). Sau kết thúc không thể chọn/đi quân, vẫn điều hướng bàn phím được. Nút “Ván mới” tạo lại khai cuộc; hỏi xác nhận nếu đã đi và trận chưa kết thúc, hủy sẽ giữ nguyên trận.
 
-Trạng thái local chỉ nằm trong bộ nhớ trình duyệt, tải lại trang sẽ mất ván. Chưa có chơi qua mạng hoặc lưu/khôi phục trận.
+Trạng thái local chỉ nằm trong bộ nhớ trình duyệt, tải lại trang sẽ mất ván. Chơi qua mạng nằm riêng tại `/play`; server giữ bàn trong bộ nhớ và có thể tiếp tục sau reconnect bằng phiên ghế còn hợp lệ.
 
-Backend NestJS có `GET /health`, API tạo/vào phòng trong bộ nhớ và Socket.IO xác thực ghế/trạng thái kết nối tại cổng 3001. Có allowlist origin riêng cho Socket.IO; chưa bật CORS cho HTTP API, chưa có database. Backend quản lý một trận mỗi phòng và xác thực nước đi bằng rules qua Socket.IO; frontend `/play` hiện vẫn chỉ là phòng chờ, chưa có bàn online. Workspace rules đã có kiểu dữ liệu, thế khai cuộc, hình học bảy quân, kiểm tra chiếu và an toàn của Tướng, xác thực nước đi, liệt kê nước hợp lệ và xác định kết thúc trận. Đây là luật đã hỗ trợ cho bản thử, chưa phải toàn bộ luật thi đấu: chưa hỗ trợ hòa thỏa thuận, lặp thế, chiếu dai/đuổi dai.
+Backend NestJS có `GET /health`, API tạo/vào phòng trong bộ nhớ và Socket.IO xác thực ghế/trạng thái kết nối tại cổng 3001. Có allowlist origin riêng cho Socket.IO; chưa bật CORS cho HTTP API, chưa có database. Backend quản lý một trận mỗi phòng và xác thực nước đi bằng rules qua Socket.IO; frontend `/play` hiển thị bàn online theo snapshot server. Workspace rules đã có kiểu dữ liệu, thế khai cuộc, hình học bảy quân, kiểm tra chiếu và an toàn của Tướng, xác thực nước đi, liệt kê nước hợp lệ và xác định kết thúc trận. Đây là luật đã hỗ trợ cho bản thử, chưa phải toàn bộ luật thi đấu: chưa hỗ trợ hòa thỏa thuận, lặp thế, chiếu dai/đuổi dai.
 
 ## Cài đặt và chạy frontend
 
@@ -59,13 +59,34 @@ npm.cmd run dev:server
 npm.cmd run dev:web
 ```
 
-Frontend phải chạy tại `http://localhost:3000` hoặc `http://127.0.0.1:3000` theo allowlist socket hiện tại. Mở `/play` ở hai cửa sổ độc lập: A tạo phòng, sao chép mã; B nhập mã và biệt danh để vào. Khi đủ hai ghế chỉ báo đủ người, chưa có bàn cờ online. Ghế offline vẫn được giữ, không trở thành ghế trống.
+Frontend phải chạy tại `http://localhost:3000` hoặc `http://127.0.0.1:3000` theo allowlist socket hiện tại. Mở `/play` ở hai cửa sổ độc lập: A tạo phòng, sao chép mã; B nhập mã và biệt danh để vào. Chưa có trận thì hiện phòng chờ; khi người thứ hai giữ ghế và nhận snapshot, hiện bàn online, Đỏ đi trước. Ghế offline vẫn được giữ, không trở thành ghế trống.
 
 Phiên mỗi tab lưu trong `sessionStorage`, được kiểm tra runtime trước khi dùng; reload chỉ kết nối socket lại, không POST lại. JavaScript cùng origin đọc được token; không coi sessionStorage là kho bí mật chống XSS. Nhân bản tab có thể sao chép phiên ban đầu và thay socket tab cũ. Khi bị `room:replaced` hoặc xác thực thất bại, client dừng reconnect và xóa credentials; nếu browser chặn xóa/ghi storage sẽ báo cần xóa dữ liệu trang/đóng tab. Nếu ghi storage thất bại, phiên chỉ giữ trong bộ nhớ và reload có thể mất ghế.
 
 POST chỉ chạy từ submit, có khóa chống gửi trùng và timeout: 8 giây proxy, 12 giây browser. Không tự retry: timeout/mất response có thể xảy ra sau khi backend đã giữ ghế, và hiện chưa có cơ chế lấy lại token bị mất. Proxy chỉ gửi JSON nickname và Content-Type, không chuyển cookie/header browser; response no-store. Socket đăng ký listener trước connect, cleanup khi unmount, xác nhận phe sau `room:session` và loại callback của socket cũ. Thông tin snapshot lúc mất kết nối là dữ liệu lần gần nhất.
 
 Thử thủ công: nickname/mã sai, người thứ ba nhận ROOM_FULL, reload không tạo phòng mới, đóng cửa sổ thấy offline, nhân bản tab thấy tab cũ bị thay thế, dừng backend/khởi động lại, clipboard/storage bị chặn, phím Tab/Enter và chiều rộng 375px. Không dán token vào URL, console hoặc ảnh chụp công khai.
+
+### Bàn online và phục hồi nước đang chờ
+
+`BoardView` dùng chung phần SVG, vùng tương tác và focus bàn phím cho local/online. Local giữ logic và nút “Ván mới” riêng; online không có nút này. Bàn, lượt, nước vừa đi, chiếu và kết quả online lấy từ `game:state`; không cập nhật bàn trước khi server trả snapshot. Chỉ chọn quân mình khi đúng lượt, cả hai online, socket đã xác thực/đồng bộ và không có request chờ. Khi bị khóa vẫn dùng phím mũi tên để xem bàn.
+
+Mỗi ý định đi quân giữ cố định UUID v4, revision và đích. Timeout ack 5 giây, tối đa 3 lần gửi tổng cộng; retry không sửa payload hoặc expectedRevision. Không emit khi disconnected và dùng volatile emit để không để Socket.IO buffer nước đi ngoài luồng retry này. Reconnect phải xác thực và nhận snapshot trước khi thử lại request cũ. Ack thành công chỉ hoàn thành khi đã có snapshot đạt revision tương ứng; snapshot một mình không xác nhận request thành công.
+
+Cùng revision vẫn nhận `playEnabled` mới. Nội dung trận được so sánh theo giá trị và ID quân, không theo tham chiếu/thứ tự key; revision lùi hoặc cùng revision khác bàn được coi là lỗi đồng bộ, khóa tương tác và yêu cầu tải lại. Snapshot cũ vẫn được đối chiếu sau reconnect.
+
+Hết retry hiện “Chưa xác định được kết quả nước đi”, giữ khóa và nút “Tải lại trang”; không suy đoán thành công từ lastMove. Ack từ chối cần revision mới hơn sẽ chờ đồng bộ tối đa 5 giây, sau đó cũng khóa và hướng dẫn tải lại. `STALE_REVISION` sau retry không chứng minh lần gửi đầu đã thất bại. Pending chỉ giữ trong bộ nhớ: tải lại bỏ pending, khôi phục phiên ghế từ sessionStorage và nhận bàn hiện tại, không POST tạo/join hoặc tự gửi lại nước cũ. Nếu storage không ghi được phiên thì tải lại có thể mất credentials như giới hạn đã nêu.
+
+Kiểm tra frontend bằng công cụ hiện có, không thêm framework:
+
+```powershell
+npm.cmd run build:rules
+node --test apps/web/tests/online-game.test.mjs apps/web/tests/board.test.mjs apps/web/tests/room-hook.test.mjs
+npm.cmd run lint --workspace=@xiangqi/web
+npm.cmd run build:web
+```
+
+Test dùng `node:test`, compiler TypeScript đã có để nạp source trong bộ nhớ, đồng hồ/socket/hook giả và render HTML bằng React hiện có. Chúng kiểm tra validator, ack/snapshot, retry, reconnect, callback cũ, thay ghế, bàn phím ở mức handler và local/reset/fixture; không thay thế kiểm thử tương tác trong trình duyệt.
 
 ## Chạy và kiểm tra backend
 
@@ -202,13 +223,13 @@ Mỗi ghế giữ tối đa 256 request mới đúng định dạng gần nhất
 
 Không có `await` giữa kiểm tra và ghi trạng thái. Server gọi `isLegalMove`, tạo bàn mới/loại quân bị ăn, đổi lượt, ghi lastMove và tính `getGameStatus` trước khi commit trạng thái, tăng revision đúng một lần và phát snapshot. Không cho ăn Tướng; chiếu bí và hết nước đều là thua cho phe đến lượt. Lỗi tính toán trả `INTERNAL_ERROR` và giữ nguyên bàn. Request cạnh tranh cùng revision tối đa một nước thành công trong một process.
 
-Frontend hiện chưa gửi `game:move` hoặc hiển thị `game:state`; kiểm chứng bằng test backend/socket. Chưa có chơi lại, đầu hàng, hòa, đồng hồ, lặp thế, chiếu dai/đuổi dai, lưu bền hoặc cơ chế bảo đảm giao sự kiện sau restart.
+Frontend `/play` gửi `game:move` và hiển thị `game:state` theo quy trình pending/snapshot ở trên. Chưa có chơi lại online, đầu hàng, hòa, đồng hồ, lặp thế, chiếu dai/đuổi dai, lưu bền hoặc cơ chế bảo đảm giao sự kiện sau restart.
 
 ## Cấu trúc và vai trò
 
 - `apps/web` (`@xiangqi/web`): frontend Next.js, giao diện chơi trên máy tính và điện thoại.
 - `apps/server` (`@xiangqi/server`): NestJS với health, phòng hai ghế và trận trong bộ nhớ; xác thực nước đi qua Socket.IO bằng rules.
-- `packages/rules` (`@xiangqi/rules`): bộ luật TypeScript thuần, đang được frontend dùng; sẽ dùng chung với backend và backend sẽ xác thực nước đi khi triển khai chơi qua mạng.
+- `packages/rules` (`@xiangqi/rules`): bộ luật TypeScript thuần dùng chung; frontend local dùng để chơi trên thiết bị, backend dùng để xác thực nước đi online.
 
 `package.json` gốc khai báo các workspace; mỗi workspace có `package.json` riêng. Dự án dùng npm workspaces, chưa dùng Nx hoặc Turborepo.
 
@@ -241,7 +262,7 @@ Mỗi lần gọi tạo mảng 32 quân mới, gồm cả đối tượng quân 
 
 Frontend và backend khai báo dependency nội bộ `"@xiangqi/rules": "*"`. Khi chạy `npm.cmd install` tại gốc, npm liên kết workspace trong repository. Hai ứng dụng giữ cách import qua tên package. Next.js giữ cấu hình `transpilePackages` hiện có và sử dụng đầu ra rules đã build. Bàn local dùng state chung cho danh sách quân, lượt, ID đang chọn, nước vừa đi và thông báo; khởi tạo lười bằng dữ liệu mới. Trạng thái trận được suy ra bằng `useMemo` theo bàn/lượt, không tính lại khi chỉ chọn quân hoặc đổi focus.
 
-Build rules xóa `packages/rules/dist` cũ trước, chỉ biên dịch `src` thành JavaScript CommonJS và declaration, không đưa test vào package. Output build/test được Git bỏ qua. Backend dùng rules để xác thực nước đi và kết quả trận; frontend local cũng dùng cùng package, còn giao diện online chưa tích hợp bàn chơi.
+Build rules xóa `packages/rules/dist` cũ trước, chỉ biên dịch `src` thành JavaScript CommonJS và declaration, không đưa test vào package. Output build/test được Git bỏ qua. Backend dùng rules để xác thực nước đi và kết quả trận; frontend local cũng dùng cùng package, còn bàn online hiển thị dữ liệu backend.
 
 ### Quy trình từ bản clone chưa có dist
 

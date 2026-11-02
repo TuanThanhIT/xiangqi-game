@@ -36,6 +36,37 @@ npm.cmd run build --workspace=@xiangqi/web
 
 Lệnh `dev:web` ở gốc gọi script `dev` của workspace `@xiangqi/web`, chạy `next dev`. App Router dùng `apps/web/src/app/layout.tsx` làm khung trang và `apps/web/src/app/page.tsx` làm nội dung trang chủ. File `globals.css` chứa CSS chung; alias `@/*` trỏ tới `apps/web/src/*`.
 
+## Phòng chờ tại /play
+
+Trang `/play` cho nhập biệt danh để tạo phòng hoặc nhập thêm mã để vào phòng. HTTP đi qua hai Route Handler cố định của Next.js (`/api/rooms`, `/api/rooms/[code]/join`), Socket.IO kết nối trực tiếp backend namespace `/rooms`. Trang `/` và các trang kiểm tra kết thúc local giữ nguyên.
+
+Tạo `apps/web/.env.local` trên máy từ `apps/web/.env.example` (không commit `.env.local`):
+
+```dotenv
+BACKEND_HTTP_URL=http://127.0.0.1:3001
+NEXT_PUBLIC_BACKEND_SOCKET_URL=http://localhost:3001
+```
+
+`BACKEND_HTTP_URL` chỉ dùng ở Route Handler server. `NEXT_PUBLIC_BACKEND_SOCKET_URL` là địa chỉ công khai cho browser, được đưa vào bundle khi build; không đặt token vào biến môi trường này. Khởi động lại Next.js khi đổi cấu hình; build lại nếu đổi cấu hình public cho production. Không tạo proxy WebSocket qua Route Handler.
+
+Mở hai terminal tại gốc repository:
+
+```powershell
+npm.cmd run dev:server
+```
+
+```powershell
+npm.cmd run dev:web
+```
+
+Frontend phải chạy tại `http://localhost:3000` hoặc `http://127.0.0.1:3000` theo allowlist socket hiện tại. Mở `/play` ở hai cửa sổ độc lập: A tạo phòng, sao chép mã; B nhập mã và biệt danh để vào. Khi đủ hai ghế chỉ báo đủ người, chưa có bàn cờ online. Ghế offline vẫn được giữ, không trở thành ghế trống.
+
+Phiên mỗi tab lưu trong `sessionStorage`, được kiểm tra runtime trước khi dùng; reload chỉ kết nối socket lại, không POST lại. JavaScript cùng origin đọc được token; không coi sessionStorage là kho bí mật chống XSS. Nhân bản tab có thể sao chép phiên ban đầu và thay socket tab cũ. Khi bị `room:replaced` hoặc xác thực thất bại, client dừng reconnect và xóa credentials; nếu browser chặn xóa/ghi storage sẽ báo cần xóa dữ liệu trang/đóng tab. Nếu ghi storage thất bại, phiên chỉ giữ trong bộ nhớ và reload có thể mất ghế.
+
+POST chỉ chạy từ submit, có khóa chống gửi trùng và timeout: 8 giây proxy, 12 giây browser. Không tự retry: timeout/mất response có thể xảy ra sau khi backend đã giữ ghế, và hiện chưa có cơ chế lấy lại token bị mất. Proxy chỉ gửi JSON nickname và Content-Type, không chuyển cookie/header browser; response no-store. Socket đăng ký listener trước connect, cleanup khi unmount, xác nhận phe sau `room:session` và loại callback của socket cũ. Thông tin snapshot lúc mất kết nối là dữ liệu lần gần nhất.
+
+Thử thủ công: nickname/mã sai, người thứ ba nhận ROOM_FULL, reload không tạo phòng mới, đóng cửa sổ thấy offline, nhân bản tab thấy tab cũ bị thay thế, dừng backend/khởi động lại, clipboard/storage bị chặn, phím Tab/Enter và chiều rộng 375px. Không dán token vào URL, console hoặc ảnh chụp công khai.
+
 ## Chạy và kiểm tra backend
 
 Backend dùng NestJS 12.3.2, CommonJS, được tạo thủ công; không cần Nest CLI. Node.js 22.17.0 hiện tại đáp ứng yêu cầu runtime. Cài dependency từ gốc bằng `npm.cmd install`, giữ duy nhất `package-lock.json` ở gốc.

@@ -10,6 +10,9 @@ import { configureHttp } from "../src/configure-http";
 import type { JsonParserApplication } from "../src/configure-http";
 import { RoomsService } from "../src/rooms/rooms.service";
 import type { PublicRoomState, SeatResponse } from "../src/rooms/rooms.types";
+import type { PublicGameState } from "../src/rooms/rooms.types";
+import type { MoveAck } from "../src/rooms/move-request";
+import { randomUUID } from "node:crypto";
 
 test("Socket.IO: xác thực, trạng thái phòng, thay ghế, cạnh tranh và origin", { timeout: 30000 }, async (t) => {
   const app = await NestFactory.create<JsonParserApplication>(AppModule, { logger: false, abortOnError: false, bodyParser: false });
@@ -68,6 +71,79 @@ test("Socket.IO: xác thực, trạng thái phòng, thay ghế, cạnh tranh và
       }
       for (const token of tokens) assert.ok(!JSON.stringify(state).includes(token));
     }
+
+    async function move(socket: Socket, pieceId: string, row: number, col: number, expectedRevision: number, requestId = randomUUID()): Promise<MoveAck> {
+      return socket.timeout(4000).emitWithAck("game:move", { requestId, expectedRevision, pieceId, to: { row, col } }) as Promise<MoveAck>;
+    }
+
+    await t.test("Game socket: khai cuộc HTTP, đi/ăn luân phiên, ack trùng, cạnh tranh và reconnect", async () => {
+      const red = await request("/rooms", "Game đỏ");
+      const sr = await connect(red);
+      const initial = wait<PublicGameState>(sr, "game:state", (s) => s.game !== null);
+      const black = await request(`/rooms/${red.roomCode}/join`, "Game đen");
+      assert.equal((await initial).game!.pieces.length, 32);
+      const enabled = wait<PublicGameState>(sr, "game:state", (s) => s.playEnabled);
+      const sb = await connect(black); assert.equal((await enabled).game!.revision, 0);
+      const id = randomUUID();
+      const first = wait<PublicGameState>(sb, "game:state", (s) => s.game?.revision === 1);
+      const ack = await move(sr, "red-soldier-0", 5, 0, 0, id); assert.equal(ack.ok, true);
+      const snapshot = await first;
+      assert.equal(snapshot.game!.sideToMove, "black");
+      assert.equal(snapshot.playEnabled, true);
+      for (const token of [red.seatToken, black.seatToken]) assert.ok(!JSON.stringify(snapshot).includes(token));
+      assert.deepEqual(Object.keys(snapshot).sort(), ["game", "playEnabled", "roomCode"]);
+      assert.ok(!JSON.stringify(snapshot).includes(sr.id!));
+      let repeats = 0;
+      const listener = () => repeats++;
+      sr.on("game:state", listener);
+      try {
+        assert.deepEqual(await move(sr, "red-soldier-0", 5, 0, 0, id), ack);
+        assert.equal(repeats, 0); // Ack đi sau mọi packet cùng kết nối.
+      } finally { sr.off("game:state", listener); }
+      const competing = await Promise.all([
+        move(sb, "black-soldier-0", 4, 0, 1), move(sb, "black-soldier-2", 4, 2, 1),
+      ]);
+      assert.equal(competing.filter((a) => a.ok).length, 1);
+      assert.ok(competing.some((a) => !a.ok && a.code === "STALE_REVISION"));
+      // Request đầu cùng kết nối được xử lý trước, nên Tốt cột 0 đã tiến.
+      assert.equal((await move(sr, "red-soldier-0", 4, 0, 2)).ok, true);
+      const before = rooms.publicGameState(red.roomCode).game!;
+      assert.equal(before.pieces.length, 31); assert.equal(before.revision, 3);
+      const offline = wait<PublicGameState>(sb, "game:state", (s) => !s.playEnabled);
+      sr.disconnect(); await offline;
+      const rejected = await move(sb, "black-soldier-2", 4, 2, 3);
+      assert.ok(!rejected.ok && rejected.code === "PLAYERS_OFFLINE");
+      assert.deepEqual(rooms.publicGameState(red.roomCode).game, before);
+      const onlineAgain = wait<PublicGameState>(sb, "game:state", (s) => s.playEnabled);
+      const restored = await connect(red); assert.deepEqual((await onlineAgain).game, before);
+      assert.deepEqual(await move(restored, "red-soldier-0", 5, 0, 0, id), ack);
+      assert.equal(rooms.publicGameState(red.roomCode).game!.revision, 3);
+      // Chủ ghế mới thay thế; gọi handler trực tiếp bằng server socket cũ vẫn bị từ chối.
+      const staleServer = server.sockets.get(restored.id!)!;
+      const replaced = wait(restored, "disconnect"); await connect(red); await replaced;
+      const { RoomsGateway } = await import("../src/rooms/rooms.gateway");
+      const staleAck = app.get(RoomsGateway).handleMove(staleServer as never, { requestId: id, expectedRevision: 0,
+        pieceId: "red-soldier-0", to: { row: 5, col: 0 } });
+      assert.ok(!staleAck.ok && staleAck.code === "SOCKET_NOT_ACTIVE");
+    });
+
+    await t.test("Game socket: snapshot hai phòng cách ly, payload sai không đổi trận", async () => {
+      const a = await request("/rooms", "A"), b = await request("/rooms", "B");
+      const ba = await request(`/rooms/${a.roomCode}/join`, "A đen");
+      const bb = await request(`/rooms/${b.roomCode}/join`, "B đen");
+      const sa = await connect(a), sb = await connect(b);
+      await connect(ba); await connect(bb);
+      let leaks = 0;
+      const listener = (s: PublicGameState) => { if (s.roomCode !== b.roomCode || s.game?.revision !== 0) leaks++; };
+      sb.on("game:state", listener);
+      try {
+        const invalid = await sa.timeout(4000).emitWithAck("game:move", { seat: "red", pieces: [] }) as MoveAck;
+        assert.ok(!invalid.ok && invalid.code === "INVALID_MOVE_REQUEST");
+        assert.equal((await move(sa, "red-soldier-0", 5, 0, 0)).ok, true);
+        const barrier = wait(sb, "test:barrier"); server.to(sb.id!).emit("test:barrier"); await barrier;
+        assert.equal(leaks, 0); assert.equal(rooms.publicGameState(b.roomCode).game!.revision, 0);
+      } finally { sb.off("game:state", listener); }
+    });
 
     await t.test("HTTP join cập nhật người Đỏ; connect/disconnect và payload không token", async () => {
       const red = await request("/rooms", "Đỏ");
@@ -197,6 +273,8 @@ test("Socket.IO: xác thực, trạng thái phòng, thay ghế, cạnh tranh và
           deadline = setTimeout(() => reject(new Error("Timeout bước join được giữ")), 4000);
         })]);
         clearTimeout(deadline);
+        const premature = await move(stale, "red-soldier-0", 5, 0, 0);
+        assert.ok(!premature.ok && premature.code === "SOCKET_NOT_ACTIVE");
         const disconnected = wait(stale, "disconnect");
         const current = await connect(red); await disconnected;
         release();

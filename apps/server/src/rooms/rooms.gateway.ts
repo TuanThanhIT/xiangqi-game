@@ -1,10 +1,12 @@
 import { OnModuleDestroy } from "@nestjs/common";
-import { OnGatewayConnection, OnGatewayDisconnect, OnGatewayInit, WebSocketGateway } from "@nestjs/websockets";
+import { ConnectedSocket, MessageBody, SubscribeMessage, OnGatewayConnection, OnGatewayDisconnect, OnGatewayInit, WebSocketGateway } from "@nestjs/websockets";
 import type { Namespace, Socket } from "socket.io";
 import type { IncomingMessage } from "node:http";
 import { RoomsService } from "./rooms.service";
 import type { SeatIdentity } from "./rooms.types";
 import { SOCKET_ORIGINS, isAllowedSocketOrigin } from "./socket-origin";
+import { moveFailure } from "./move-request";
+import type { MoveAck } from "./move-request";
 
 interface RoomSocketData { identity?: SeatIdentity }
 type RoomSocket = Socket<Record<string, never>, Record<string, (...args: unknown[]) => void>, Record<string, never>, RoomSocketData>;
@@ -53,6 +55,7 @@ export class RoomsGateway implements OnGatewayInit, OnGatewayConnection, OnGatew
     });
     this.unsubscribe = this.rooms.onRoomChange((code) => {
       this.server.to(this.channel(code)).emit("room:state", this.rooms.publicState(code));
+      this.server.to(this.channel(code)).emit("game:state", this.rooms.publicGameState(code));
     });
   }
 
@@ -86,12 +89,21 @@ export class RoomsGateway implements OnGatewayInit, OnGatewayConnection, OnGatew
       await socket.leave(this.channel(identity.roomCode));
       socket.disconnect(true); return;
     }
+    if (!this.rooms.markSocketAttached(identity, socket.id)) { socket.disconnect(true); return; }
     socket.emit("room:session", { roomCode: identity.roomCode, seat: identity.seat });
     this.rooms.notifyChange(identity.roomCode);
   }
 
   handleDisconnect(socket: RoomSocket): void {
     if (socket.data.identity) this.rooms.releaseSocket(socket.data.identity, socket.id);
+  }
+
+  @SubscribeMessage("game:move")
+  handleMove(@ConnectedSocket() socket: RoomSocket, @MessageBody() payload: unknown): MoveAck {
+    try {
+      if (!socket.connected || !socket.data.identity) return moveFailure("SOCKET_NOT_ACTIVE", null);
+      return this.rooms.move(socket.data.identity, socket.id, payload);
+    } catch { return moveFailure("INTERNAL_ERROR", null); }
   }
 
   onModuleDestroy(): void { this.unsubscribe?.(); }

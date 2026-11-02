@@ -10,7 +10,7 @@ Trận kết thúc khi bên đến lượt hết nước hợp lệ: bị chiế
 
 Trạng thái local chỉ nằm trong bộ nhớ trình duyệt, tải lại trang sẽ mất ván. Chưa có chơi qua mạng hoặc lưu/khôi phục trận.
 
-Backend NestJS có `GET /health`, API tạo/vào phòng trong bộ nhớ và Socket.IO xác thực ghế/trạng thái kết nối tại cổng 3001. Có allowlist origin riêng cho Socket.IO; chưa bật CORS cho HTTP API, chưa có database hoặc tích hợp rules. Workspace rules đã có kiểu dữ liệu, thế khai cuộc, hình học bảy quân, kiểm tra chiếu và an toàn của Tướng, xác thực nước đi, liệt kê nước hợp lệ và xác định kết thúc trận. Đây là luật đã hỗ trợ cho bản thử, chưa phải toàn bộ luật thi đấu: chưa hỗ trợ hòa thỏa thuận, lặp thế, chiếu dai/đuổi dai.
+Backend NestJS có `GET /health`, API tạo/vào phòng trong bộ nhớ và Socket.IO xác thực ghế/trạng thái kết nối tại cổng 3001. Có allowlist origin riêng cho Socket.IO; chưa bật CORS cho HTTP API, chưa có database. Backend quản lý một trận mỗi phòng và xác thực nước đi bằng rules qua Socket.IO; frontend `/play` hiện vẫn chỉ là phòng chờ, chưa có bàn online. Workspace rules đã có kiểu dữ liệu, thế khai cuộc, hình học bảy quân, kiểm tra chiếu và an toàn của Tướng, xác thực nước đi, liệt kê nước hợp lệ và xác định kết thúc trận. Đây là luật đã hỗ trợ cho bản thử, chưa phải toàn bộ luật thi đấu: chưa hỗ trợ hòa thỏa thuận, lặp thế, chiếu dai/đuổi dai.
 
 ## Cài đặt và chạy frontend
 
@@ -31,10 +31,10 @@ Kiểm tra frontend từ thư mục gốc:
 
 ```powershell
 npm.cmd run lint --workspace=@xiangqi/web
-npm.cmd run build --workspace=@xiangqi/web
+npm.cmd run build:web
 ```
 
-Lệnh `dev:web` ở gốc gọi script `dev` của workspace `@xiangqi/web`, chạy `next dev`. App Router dùng `apps/web/src/app/layout.tsx` làm khung trang và `apps/web/src/app/page.tsx` làm nội dung trang chủ. File `globals.css` chứa CSS chung; alias `@/*` trỏ tới `apps/web/src/*`.
+Lệnh `dev:web` ở gốc build rules trước, rồi gọi script `dev` của workspace `@xiangqi/web`, chạy `next dev`. App Router dùng `apps/web/src/app/layout.tsx` làm khung trang và `apps/web/src/app/page.tsx` làm nội dung trang chủ. File `globals.css` chứa CSS chung; alias `@/*` trỏ tới `apps/web/src/*`.
 
 ## Phòng chờ tại /play
 
@@ -74,8 +74,8 @@ Backend dùng NestJS 12.3.2, CommonJS, được tạo thủ công; không cần 
 Từ thư mục gốc, chạy:
 
 ```powershell
-npm.cmd run typecheck --workspace=@xiangqi/server
-npm.cmd run build --workspace=@xiangqi/server
+npm.cmd run typecheck:server
+npm.cmd run build:server
 npm.cmd run dev:server
 ```
 
@@ -134,12 +134,12 @@ Lỗi có dạng `{"statusCode":409,"code":"ROOM_FULL","message":"Phòng đã đ
 | 503 | ROOM_CODE_UNAVAILABLE | Hết 20 lần thử mã |
 | 500 | INTERNAL_ERROR | Lỗi bất ngờ, không trả stack hoặc chi tiết nội bộ |
 
-Controller định tuyến HTTP; pipe xác thực body/mã; service giữ Map và thực hiện tạo/join. Join không có `await` giữa kiểm tra và ghi ghế, nên trong một process chỉ một request chiếm được ghế Đen. Chưa hỗ trợ nhiều process/server, phục hồi phiên, hết hạn/dọn phòng, chống spam hoặc giới hạn số phòng. Khởi động lại server mất toàn bộ phòng. Chưa tạo bàn cờ, endpoint xem phòng, database hoặc tích hợp frontend/rules. Socket.IO chỉ đồng bộ trạng thái công khai của phòng như phần dưới.
+Controller định tuyến HTTP; pipe xác thực body/mã; service giữ Map và thực hiện tạo/join. Join không có `await` giữa kiểm tra và ghi ghế, nên trong một process chỉ một request chiếm được ghế Đen. Ghế Đen và trận khai cuộc được chuẩn bị rồi ghi cùng nhau; lỗi khởi tạo không giữ lại ghế Đen. Chưa hỗ trợ nhiều process/server, hết hạn/dọn phòng, chống spam hoặc giới hạn số phòng. Khởi động lại server mất toàn bộ phòng, trận, token và cache request. Chưa có endpoint xem phòng hoặc database. Socket.IO đồng bộ phòng và trận như phần dưới.
 
 Chạy test backend từ gốc:
 
 ```powershell
-npm.cmd run test --workspace=@xiangqi/server
+npm.cmd run test:server
 ```
 
 Test dùng TypeScript/CommonJS, `node:test`, `node:assert/strict` và fetch có sẵn, không thêm dependency. Runner xóa `.test-output` trước biên dịch; output được Git bỏ qua. Test HTTP dùng cổng ngẫu nhiên và đóng app trong `finally`, gồm test hai join cạnh tranh.
@@ -163,19 +163,58 @@ Khi Đen join qua HTTP, RoomsService phát thông báo nội bộ chỉ chứa m
 
 Development chỉ cho Origin `http://localhost:3000` và `http://127.0.0.1:3000`. CORS riêng Socket.IO và allowRequest chặn Origin sai/thiếu trên cả polling/WebSocket; không dùng wildcard hoặc mở CORS cho HTTP API. Test Node phải gửi Origin hợp lệ. Origin không thay thế token xác thực; chưa cấu hình cho IP LAN/cổng khác hoặc production.
 
-Test backend hiện có chạy cả HTTP và socket: xác thực, phòng cách ly, join HTTP cập nhật online, connect/disconnect, thay socket/reconnect/cạnh tranh, payload không token và origin. Các lần chờ có timeout; test đóng client/app kể cả khi thất bại. Bước này chưa làm frontend, bàn cờ/nước đi, database, nhiều process, hết hạn/dọn phòng hoặc chống spam.
+Test backend hiện có chạy cả HTTP và socket: xác thực, phòng cách ly, join HTTP cập nhật online, connect/disconnect, thay socket/reconnect/cạnh tranh, payload không token và origin. Các lần chờ có timeout; test đóng client/app kể cả khi thất bại. Chưa làm bàn online trên frontend, database, nhiều process, hết hạn/dọn phòng hoặc chống spam.
+
+## Trận online ở backend
+
+RoomsService vẫn giữ Map phòng duy nhất. Mỗi phòng có `game: null` khi chỉ có Đỏ; khi Đen giữ ghế thành công, server tạo 32 quân mới, Đỏ đi trước, `revision: 0`. Trận gồm `pieces`, `sideToMove`, `lastMove` (`{ pieceId, from, to }` hoặc `null`), `revision` và `result` theo `GameStatus` của rules.
+
+Server phát event riêng `game:state` với `{ roomCode, game, playEnabled }`, không thay đổi hợp đồng `room:state`. Snapshot là bản sao công khai, không có token, socket ID hoặc cache. `playEnabled` chỉ đúng khi trận còn chơi và hai socket hiện hành đã attach xong; nó không thay thế kiểm tra lượt. Connect/reconnect nhận `room:session` trước trạng thái hiện tại. Offline chỉ tạm ngừng chơi, không đổi bàn, revision hoặc xử thua; cả hai online lại thì tiếp tục.
+
+Client gửi `game:move` kèm callback acknowledgement, không gửi phe, phòng hoặc bàn cờ:
+
+```json
+{
+  "requestId": "550e8400-e29b-41d4-a716-446655440000",
+  "expectedRevision": 0,
+  "pieceId": "red-soldier-0",
+  "to": { "row": 5, "col": 0 }
+}
+```
+
+Validation runtime chỉ nhận đúng bốn trường trên: UUID v4 (chuẩn hóa chữ thường), revision nguyên an toàn không âm, ID dài 1–64 ký tự chữ/số/`_`/`-`, đích nguyên trong hàng 0–9/cột 0–8. Trường thừa hoặc sai kiểu bị từ chối. Server lấy phòng/phe từ socket đã xác thực và kiểm tra `activeSocketId` cùng trạng thái attach trước tra cache.
+
+Ack thành công:
+
+```json
+{ "ok": true, "requestId": "550e8400-e29b-41d4-a716-446655440000", "appliedRevision": 1 }
+```
+
+Ack thất bại, ví dụ bàn đã cũ:
+
+```json
+{ "ok": false, "requestId": "550e8400-e29b-41d4-a716-446655440000", "code": "STALE_REVISION", "message": "Bàn cờ đã thay đổi.", "currentRevision": 1 }
+```
+
+`requestId` là `null` khi payload không hợp lệ hoặc socket không còn quyền/chưa attach; `currentRevision` có khi server biết revision trong bước xử lý. Các mã lỗi: `INVALID_MOVE_REQUEST`, `SOCKET_NOT_ACTIVE`, `GAME_NOT_STARTED`, `PLAYERS_OFFLINE`, `GAME_FINISHED`, `STALE_REVISION`, `NOT_YOUR_TURN`, `ILLEGAL_MOVE`, `REQUEST_ID_CONFLICT`, `INTERNAL_ERROR`. Thông báo cố định không phản chiếu dữ liệu bí mật hoặc stack.
+
+Mỗi ghế giữ tối đa 256 request mới đúng định dạng gần nhất, gồm payload chuẩn hóa và ack (cả thành công và bị từ chối); request không hợp lệ hoặc socket không có quyền không được lưu. Cache không bị mất khi thay socket/reconnect. Cùng ID/cùng payload trả lại ack cũ trước kiểm tra lượt/revision/kết thúc, không đi lại hoặc phát snapshot lại. Cùng ID/khác payload trả `REQUEST_ID_CONFLICT`. Một yêu cầu mới phải dùng ID mới; retry giữ nguyên cả ID và payload. Sau eviction, nước từng thành công vẫn không thể áp dụng lại do expectedRevision đã cũ. Ack cũ có thể chứa revision cũ; snapshot hiện tại mới là bàn đang chơi.
+
+Không có `await` giữa kiểm tra và ghi trạng thái. Server gọi `isLegalMove`, tạo bàn mới/loại quân bị ăn, đổi lượt, ghi lastMove và tính `getGameStatus` trước khi commit trạng thái, tăng revision đúng một lần và phát snapshot. Không cho ăn Tướng; chiếu bí và hết nước đều là thua cho phe đến lượt. Lỗi tính toán trả `INTERNAL_ERROR` và giữ nguyên bàn. Request cạnh tranh cùng revision tối đa một nước thành công trong một process.
+
+Frontend hiện chưa gửi `game:move` hoặc hiển thị `game:state`; kiểm chứng bằng test backend/socket. Chưa có chơi lại, đầu hàng, hòa, đồng hồ, lặp thế, chiếu dai/đuổi dai, lưu bền hoặc cơ chế bảo đảm giao sự kiện sau restart.
 
 ## Cấu trúc và vai trò
 
 - `apps/web` (`@xiangqi/web`): frontend Next.js, giao diện chơi trên máy tính và điện thoại.
-- `apps/server` (`@xiangqi/server`): NestJS với health và phòng hai ghế trong bộ nhớ; chưa có bàn cờ hoặc xác thực nước đi trên server.
+- `apps/server` (`@xiangqi/server`): NestJS với health, phòng hai ghế và trận trong bộ nhớ; xác thực nước đi qua Socket.IO bằng rules.
 - `packages/rules` (`@xiangqi/rules`): bộ luật TypeScript thuần, đang được frontend dùng; sẽ dùng chung với backend và backend sẽ xác thực nước đi khi triển khai chơi qua mạng.
 
 `package.json` gốc khai báo các workspace; mỗi workspace có `package.json` riêng. Dự án dùng npm workspaces, chưa dùng Nx hoặc Turborepo.
 
 ## Dùng package rules
 
-`@xiangqi/rules` là TypeScript thuần, không phụ thuộc React, Next.js, NestJS hoặc DOM. Package export các kiểu `Side`, `PieceType`, `Row`, `Col`, `Piece` và hàm `createInitialPieces()` qua `src/index.ts`.
+`@xiangqi/rules` là TypeScript thuần, không phụ thuộc React, Next.js, NestJS hoặc DOM. Mã nguồn API nằm tại `src/index.ts`; package export JavaScript CommonJS tại `dist/index.js` và kiểu declaration tại `dist/index.d.ts`. Có các kiểu `Side`, `PieceType`, `Row`, `Col`, `Piece` và hàm `createInitialPieces()`.
 
 Package cũng export bảy hàm trả về `boolean`: `canRookMoveByGeometry`, `canCannonMoveByGeometry`, `canHorseMoveByGeometry`, `canElephantMoveByGeometry`, `canAdvisorMoveByGeometry`, `canGeneralMoveByGeometry`, `canSoldierMoveByGeometry`. Mỗi hàm nhận `readonly Piece[]`, ID quân và điểm đến `{ row: number; col: number }`, không thay đổi dữ liệu đầu vào.
 
@@ -200,9 +239,29 @@ const pieces: Piece[] = createInitialPieces();
 
 Mỗi lần gọi tạo mảng 32 quân mới, gồm cả đối tượng quân và `position` mới; ID ổn định giữa các lần gọi. Không export một mảng mutable dùng chung giữa các trận.
 
-Frontend khai báo dependency nội bộ `"@xiangqi/rules": "*"`. Khi chạy `npm.cmd install` tại gốc, npm liên kết workspace trong repository. Next.js dùng `transpilePackages` trong `apps/web/next.config.ts` để biên dịch mã TypeScript của rules, chưa cần build riêng package. Bàn local dùng state chung cho danh sách quân, lượt, ID đang chọn, nước vừa đi và thông báo; khởi tạo lười bằng dữ liệu mới. Trạng thái trận được suy ra bằng `useMemo` theo bàn/lượt, không tính lại khi chỉ chọn quân hoặc đổi focus.
+Frontend và backend khai báo dependency nội bộ `"@xiangqi/rules": "*"`. Khi chạy `npm.cmd install` tại gốc, npm liên kết workspace trong repository. Hai ứng dụng giữ cách import qua tên package. Next.js giữ cấu hình `transpilePackages` hiện có và sử dụng đầu ra rules đã build. Bàn local dùng state chung cho danh sách quân, lượt, ID đang chọn, nước vừa đi và thông báo; khởi tạo lười bằng dữ liệu mới. Trạng thái trận được suy ra bằng `useMemo` theo bàn/lượt, không tính lại khi chỉ chọn quân hoặc đổi focus.
 
-Khi triển khai NestJS, cần cấu hình backend biên dịch/nạp package TypeScript này (hoặc bổ sung đầu ra JavaScript cho rules) trong nhiệm vụ riêng. Hiện chưa kiểm chứng việc dùng rules trên backend; xác thực nước đi hiện chạy tại frontend local.
+Build rules xóa `packages/rules/dist` cũ trước, chỉ biên dịch `src` thành JavaScript CommonJS và declaration, không đưa test vào package. Output build/test được Git bỏ qua. Backend dùng rules để xác thực nước đi và kết quả trận; frontend local cũng dùng cùng package, còn giao diện online chưa tích hợp bàn chơi.
+
+### Quy trình từ bản clone chưa có dist
+
+Chạy tại gốc repository (có thể dùng `npm.cmd ci` thay `install` khi cài theo lockfile):
+
+```powershell
+npm.cmd ci
+npm.cmd run test --workspace=@xiangqi/rules
+npm.cmd run test:server
+npm.cmd run typecheck:server
+npm.cmd run build:server
+npm.cmd run lint --workspace=@xiangqi/web
+npm.cmd run build:web
+```
+
+Các script gốc `dev:web`, `dev:server`, `test:server`, `typecheck:server`, `build:server`, `build:web` đều build rules trước khi chạy công việc tương ứng, nên không cần dist từ lần trước. Lệnh workspace trực tiếp của web/server không tự chuẩn bị rules; hãy dùng các script gốc trên hoặc chạy `npm.cmd run build:rules` trước. Test rules tự biên dịch mã nguồn riêng, không cần dist.
+
+Khi sửa rules, chạy `npm.cmd run build:rules` rồi **dừng và khởi động lại backend** bằng `npm.cmd run dev:server`; nodemon hiện chỉ theo dõi `apps/server/src`. Khởi động lại frontend bằng `npm.cmd run dev:web` để nạp bản rules mới. Chưa có tiến trình watch rules tự động.
+
+Production build theo thứ tự rules → server/web bằng các lệnh trên; chạy `npm.cmd run start --workspace=@xiangqi/server` và `npm.cmd run start --workspace=@xiangqi/web` ở hai terminal riêng. Khi triển khai phải giữ `packages/rules/dist`, package metadata và liên kết npm workspace trong repository, không chỉ sao chép riêng `apps/server/dist`. Node chạy JavaScript CommonJS của rules; không cần ts-node ở production.
 
 ## Phạm vi V1 đã thống nhất (gồm các phần chưa triển khai)
 

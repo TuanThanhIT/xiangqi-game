@@ -1,8 +1,13 @@
 {
   "private": true,
   "scripts": {
-    "dev:web": "npm run dev --workspace=@xiangqi/web",
-    "dev:server": "npm run dev --workspace=@xiangqi/server"
+    "build:rules": "npm run build --workspace=@xiangqi/rules",
+    "dev:web": "npm run build:rules && npm run dev --workspace=@xiangqi/web",
+    "dev:server": "npm run build:rules && npm run dev --workspace=@xiangqi/server",
+    "build:web": "npm run build:rules && npm run build --workspace=@xiangqi/web",
+    "build:server": "npm run build:rules && npm run build --workspace=@xiangqi/server",
+    "test:server": "npm run build:rules && npm run test --workspace=@xiangqi/server",
+    "typecheck:server": "npm run build:rules && npm run typecheck --workspace=@xiangqi/server"
   },
   "workspaces": [
     "apps/*",

@@ -1,5 +1,6 @@
 import { Body, Controller, Header, HttpCode, Param, Post } from "@nestjs/common";
-import { RoomCodePipe, RoomRequestPipe } from "./room-request.pipe";
+import { CreateRoomRequestPipe, RoomCodePipe, RoomRequestPipe } from "./room-request.pipe";
+import type { CreateRoomRequest } from "./room-request.pipe";
 import { RoomsService } from "./rooms.service";
 import type { SeatResponse } from "./rooms.types";
 
@@ -10,8 +11,8 @@ export class RoomsController {
   @Post()
   @HttpCode(201)
   @Header("Cache-Control", "no-store")
-  create(@Body(RoomRequestPipe) nickname: string): SeatResponse {
-    return this.rooms.create(nickname);
+  create(@Body(CreateRoomRequestPipe) request: CreateRoomRequest): SeatResponse {
+    return this.rooms.create(request.nickname, request.themeId);
   }
 
   @Post(":code/join")

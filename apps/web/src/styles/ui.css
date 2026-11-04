@@ -1,0 +1,116 @@
+/* Chỉ áp dụng khi chủ động dùng lớp xq-; không đổi các màn hình cũ. */
+:root {
+  --xq-nameplate: #302117;
+  --xq-nameplate-active: #3c2b1d;
+  --xq-nameplate-text: #f5e9d0;
+  --xq-nameplate-muted: #d3c3a7;
+  --xq-nameplate-border: #b59664;
+  --xq-nameplate-accent: #efc986;
+  --xq-nameplate-online: #afd7a2;
+  --xq-bridge-wood: #91673c;
+  --xq-bridge-dark: #533b24;
+  --xq-bridge-light: #c69d62;
+  --xq-background: #141615;
+  --xq-surface: #202320;
+  --xq-surface-raised: #292b26;
+  --xq-text: #f3e6cd;
+  --xq-on-primary: #f3e6cd;
+  --xq-text-muted: #c8baa4;
+  --xq-primary: #a4392b;
+  --xq-primary-hover: #b13d2e;
+  --xq-primary-pressed: #923025;
+  --xq-primary-border: #f3cf88;
+  --xq-secondary-hover: #493c2d;
+  --xq-secondary-pressed: #373024;
+  --xq-accent: #dfb875;
+  --xq-border-control: #9d835f;
+  --xq-divider: #61503c;
+  --xq-danger-text: #f2a294;
+  --xq-success-text: #a8cca4;
+  --xq-danger-hover: #422822;
+  --xq-danger-pressed: #522c25;
+  --xq-focus-dark: #f3cf88;
+  --xq-disabled-text: #c8baa4;
+  --xq-primary-disabled: #4a302a;
+  --xq-secondary-disabled: #242723;
+  --xq-danger-disabled: #292222;
+  --xq-danger-disabled-border: #875f57;
+  --xq-resume: #3b3426;
+  --xq-glow-son: #362420;
+  --xq-glow-bronze: #302b1e;
+  --xq-shadow: #00000033;
+  --xq-font-body: Arial, Helvetica, sans-serif;
+  --xq-font-heading: Georgia, "Times New Roman", serif;
+  --xq-space-1: 4px;
+  --xq-space-2: 8px;
+  --xq-space-3: 12px;
+  --xq-space-4: 16px;
+  --xq-space-6: 24px;
+  --xq-space-8: 32px;
+  --xq-space-12: 48px;
+  --xq-radius-control: 4px;
+  --xq-radius-panel: 8px;
+  --xq-board: #efdab1;
+  --xq-piece: #fff8e9;
+  --xq-board-line: #80623d;
+  --xq-board-ink: #29251f;
+  --xq-board-focus: #1e4f7b;
+  --xq-board-last-move: #6b4a1e;
+  --xq-side-red: #a52121;
+  --xq-side-black: #262626;
+  --xq-river: #9abbb0;
+  --xq-river-depth: #88aba1;
+  --xq-frame: #80623d;
+  --xq-frame-trim: #c7ac7d;
+}
+/* Button và ActionLink dùng chung kiểu; không sở hữu state hoặc sự kiện. */
+.xq-action {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--xq-space-3); min-width: 0; min-height: 48px;
+  padding: var(--xq-space-3) var(--xq-space-4);
+  border: 1px solid var(--xq-border-control); border-radius: var(--xq-radius-control);
+  background: var(--xq-surface-raised); color: var(--xq-text);
+  font: 600 1rem/1.5 var(--xq-font-body); text-decoration: none; text-align: left;
+  overflow-wrap: anywhere; cursor: pointer;
+  transition: background-color 150ms ease, border-color 150ms ease;
+}
+.xq-action > * { min-width: 0; }
+.xq-action--primary { background: var(--xq-primary); color: var(--xq-on-primary); border-color: var(--xq-primary-border); }
+.xq-action--secondary { background: var(--xq-surface-raised); }
+.xq-action--danger { background: var(--xq-surface); color: var(--xq-danger-text); border-color: var(--xq-danger-text); }
+.xq-action--primary:where(:not(:disabled)):hover { background: var(--xq-primary-hover); }
+.xq-action--secondary:where(:not(:disabled)):hover { background: var(--xq-secondary-hover); border-color: var(--xq-accent); }
+.xq-action--danger:where(:not(:disabled)):hover { background: var(--xq-danger-hover); }
+.xq-action--primary:where(:not(:disabled)):active { background: var(--xq-primary-pressed); }
+.xq-action--secondary:where(:not(:disabled)):active { background: var(--xq-secondary-pressed); }
+.xq-action--danger:where(:not(:disabled)):active { background: var(--xq-danger-pressed); }
+.xq-action:focus-visible { outline: 3px solid var(--xq-focus-dark); outline-offset: 3px; }
+.xq-action:disabled { opacity: 1; color: var(--xq-disabled-text); border-style: dashed; cursor: not-allowed; }
+.xq-action--primary:disabled { background: var(--xq-primary-disabled); border-color: var(--xq-border-control); }
+.xq-action--secondary:disabled { background: var(--xq-secondary-disabled); }
+.xq-action--danger:disabled { background: var(--xq-danger-disabled); border-color: var(--xq-danger-disabled-border); }
+.xq-panel {
+  padding: var(--xq-space-4); border: 1px solid var(--xq-border-control);
+  border-radius: var(--xq-radius-panel); color: var(--xq-text); background: var(--xq-surface);
+}
+@media (min-width: 768px) { .xq-panel { padding: var(--xq-space-6); } }
+@media (prefers-reduced-motion: reduce) { .xq-action { transition: none; } }
+
+.xq-game-page {
+  width: 100%; min-height: 100svh; padding: clamp(1rem, 3vw, 2rem);
+  background: var(--xq-background); color: var(--xq-text); font-family: var(--xq-font-body);
+}
+.xq-game-page h1 { font: 400 clamp(1.75rem, 4vw, 2.25rem)/1.3 var(--xq-font-heading); margin-bottom: var(--xq-space-6); }
+.xq-local-content { max-width: 608px; margin-inline: auto; }
+.xq-local-nav { display: flex; margin-bottom: var(--xq-space-4); }
+.xq-game-shell { min-width: 0; max-width: 608px; margin-inline: auto; color: var(--xq-text); background: var(--xq-background); border-radius: var(--xq-radius-panel); }
+.xq-game-shell .game-status { padding: var(--xq-space-4); border: 1px solid var(--xq-border-control); border-radius: var(--xq-radius-panel); background: var(--xq-surface); text-align: left; font-size: .875rem; }
+.xq-game-shell .xq-turn { color: var(--xq-accent); font-size: 1.125rem; margin-bottom: var(--xq-space-2); }
+.xq-game-muted, .xq-game-shell .board-help { color: var(--xq-text-muted); }
+.xq-game-shell .board-actions { gap: var(--xq-space-3); flex-wrap: wrap; margin-top: var(--xq-space-6); }
+.xq-game-shell .xq-result { margin-top: var(--xq-space-6); border-top: 3px solid var(--xq-accent); }
+.xq-game-shell .xq-result--neutral { border-top-color: var(--xq-border-control); }
+.xq-result h2 { margin: 0 0 var(--xq-space-4); font: 400 1.5rem/1.3 var(--xq-font-heading); }
+.xq-result p, .xq-offline p { margin: 0; }
+.xq-result > [role="status"] { padding: 0; margin: 0; border: 0; background: transparent; }
+.xq-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }

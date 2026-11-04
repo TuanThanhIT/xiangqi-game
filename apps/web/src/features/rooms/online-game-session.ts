@@ -1,12 +1,13 @@
-import { isGameSnapshot, isMoveAck, moveMessages, sameGame } from "./game-contract";
-import type { GameSnapshot, MoveAck, MoveRequest } from "./game-contract";
+import { isGameSnapshot, isMoveAck, isResignAck, moveMessages, resignMessages, sameGame } from "./game-contract";
+import type { GameSnapshot, MoveAck, MoveRequest, ResignAck, ResignRequest } from "./game-contract";
 import type { Piece, Side } from "@xiangqi/rules";
 
-interface Pending { request: MoveRequest; attempts: number; ack: MoveAck | null; unknown: boolean }
-export interface OnlineState { snapshot: GameSnapshot | null; synced: boolean; pending: Pending | null; message: string; recovery: boolean }
+type Pending = ({ kind: "move"; request: MoveRequest } | { kind: "resign"; request: ResignRequest }) &
+  { baseRevision: number; attempts: number; ack: MoveAck | ResignAck | null; unknown: boolean };
+export interface OnlineState { snapshot: GameSnapshot | null; receivedAt?: number; synced: boolean; pending: Pending | null; message: string; recovery: boolean }
 interface Port {
   connected(): boolean;
-  send(request: MoveRequest, callback: (ack: unknown) => void): void;
+  send(request: MoveRequest | ResignRequest, callback: (ack: unknown) => void, kind: "move" | "resign"): void;
   change(state: OnlineState): void;
   schedule(callback: () => void, delay: number): () => void;
   uuid(): string;
@@ -35,7 +36,7 @@ export class OnlineGameSession {
     this.state.synced = false; this.state.message = "Dữ liệu trận không nhất quán. Hãy tải lại trang."; this.state.recovery = true;
     this.publish(); this.port.protocolError();
   }
-  private unknown(message = "Chưa xác định được kết quả nước đi") {
+  private unknown(message = this.state.pending?.kind === "resign" ? "Chưa xác định được kết quả đầu hàng" : "Chưa xác định được kết quả nước đi") {
     this.clearTimer(); this.generation++;
     if (this.state.pending) this.state.pending.unknown = true;
     this.state.message = message; this.state.recovery = true; this.publish();
@@ -54,7 +55,7 @@ export class OnlineGameSession {
     this.authenticated = false; this.generation++; this.clearTimer(); this.state.synced = false; this.publish();
   }
   reconnectFailed() {
-    if (!this.disposed) this.unknown("Không kết nối lại được. Hãy tải lại trang để đồng bộ bàn; nước đang chờ chưa được xác định kết quả.");
+    if (!this.disposed) this.unknown("Không kết nối lại được. Hãy tải lại trang để đồng bộ bàn; hành động đang chờ chưa được xác định kết quả.");
   }
   receiveSnapshot(value: unknown) {
     if (this.disposed || !this.authenticated) return;
@@ -64,7 +65,7 @@ export class OnlineGameSession {
       this.failProtocol(); return;
     }
     const first = !this.state.synced;
-    this.state.snapshot = structuredClone(value); this.state.synced = true;
+    this.state.snapshot = structuredClone(value); this.state.receivedAt = Date.now(); this.state.synced = true;
     const pending = this.state.pending;
     if (pending?.unknown) { this.publish(); return; }
     if (pending?.ack) { if (first) this.clearTimer(); this.settle(); }
@@ -72,16 +73,25 @@ export class OnlineGameSession {
     else if (!pending) this.clearTimer();
     this.publish();
   }
-  canInteract(): boolean {
+  canResign(): boolean {
     const game = this.state.snapshot?.game;
     return !this.disposed && this.authenticated && this.port.connected() && this.state.synced && !this.state.recovery &&
-      !this.state.pending && !!this.state.snapshot?.playEnabled && !!game && game.result.status === "playing" && game.sideToMove === this.side;
+      !this.state.pending && !!game && game.result.status === "playing";
+  }
+  canInteract(): boolean {
+    return this.canResign() && !!this.state.snapshot?.playEnabled && this.state.snapshot.game?.sideToMove === this.side;
+  }
+  sendResign(): boolean {
+    if (!this.canResign()) return false;
+    this.state.pending = { kind: "resign", request: { requestId: this.port.uuid() }, baseRevision: this.state.snapshot!.game!.revision,
+      attempts: 0, ack: null, unknown: false };
+    this.state.message = "Đang gửi yêu cầu đầu hàng…"; this.transmit(); this.publish(); return true;
   }
   sendMove(pieceId: string, to: Piece["position"]): boolean {
     if (!this.canInteract()) return false;
     const game = this.state.snapshot!.game!;
     if (!game.pieces.some((p) => p.id === pieceId && p.side === this.side)) return false;
-    this.state.pending = { request: { requestId: this.port.uuid(), expectedRevision: game.revision, pieceId, to: { ...to } },
+    this.state.pending = { kind: "move", baseRevision: game.revision, request: { requestId: this.port.uuid(), expectedRevision: game.revision, pieceId, to: { ...to } },
       attempts: 0, ack: null, unknown: false };
     this.state.message = "Đang gửi nước đi…"; this.transmit(); this.publish(); return true;
   }
@@ -98,25 +108,30 @@ export class OnlineGameSession {
     });
     this.port.send(structuredClone(p.request), (value) => {
       if (this.disposed || generation !== this.generation || this.state.pending !== p || !this.authenticated) return;
-      if (!isMoveAck(value) || (value.requestId !== null && value.requestId.toLowerCase() !== p.request.requestId.toLowerCase()) ||
-          (value.ok && value.appliedRevision !== p.request.expectedRevision + 1)) { this.failProtocol(); return; }
-      if (!value.ok && value.requestId === null && !["SOCKET_NOT_ACTIVE", "INVALID_MOVE_REQUEST", "INTERNAL_ERROR"].includes(value.code)) {
+      if (!(p.kind === "move" ? isMoveAck(value) : isResignAck(value))) { this.failProtocol(); return; }
+      const ack = value as MoveAck | ResignAck;
+      if ((ack.requestId !== null && ack.requestId.toLowerCase() !== p.request.requestId.toLowerCase()) ||
+          (ack.ok && (p.kind === "move" ? ack.appliedRevision !== p.request.expectedRevision + 1 : ack.appliedRevision <= p.baseRevision))) { this.failProtocol(); return; }
+      if (!ack.ok && ack.requestId === null && !["SOCKET_NOT_ACTIVE", p.kind === "move" ? "INVALID_MOVE_REQUEST" : "INVALID_RESIGN_REQUEST", "INTERNAL_ERROR"].includes(ack.code)) {
         this.failProtocol(); return;
       }
-      this.clearTimer(); this.generation++; p.ack = value; this.settle(); this.publish();
-    });
+      this.clearTimer(); this.generation++; p.ack = ack; this.settle(); this.publish();
+    }, p.kind);
   }
   private settle() {
     const p = this.state.pending;
     if (!p?.ack || p.unknown) return;
     const ack = p.ack;
-    const target = ack.ok ? ack.appliedRevision : (ack.currentRevision ?? p.request.expectedRevision);
+    const target = ack.ok ? ack.appliedRevision : (ack.currentRevision ?? p.baseRevision);
     if (this.state.synced && (this.state.snapshot?.game?.revision ?? -1) >= target) {
-      this.clearTimer(); this.state.pending = null; this.state.message = ack.ok ? "" : moveMessages[ack.code];
-      if (!ack.ok && ["SOCKET_NOT_ACTIVE", "REQUEST_ID_CONFLICT", "INVALID_MOVE_REQUEST", "INTERNAL_ERROR"].includes(ack.code)) this.state.recovery = true;
+      this.clearTimer(); this.state.pending = null;
+      const messages = { ...moveMessages, ...resignMessages,
+        INTERNAL_ERROR: p.kind === "resign" ? resignMessages.INTERNAL_ERROR : moveMessages.INTERNAL_ERROR };
+      this.state.message = ack.ok ? "" : messages[ack.code];
+      if (!ack.ok && ["SOCKET_NOT_ACTIVE", "REQUEST_ID_CONFLICT", "INVALID_MOVE_REQUEST", "INVALID_RESIGN_REQUEST", "INTERNAL_ERROR"].includes(ack.code)) this.state.recovery = true;
     } else {
       this.state.message = "Đang chờ đồng bộ bàn từ server…";
-      if (!this.cancel) this.arm(() => this.unknown("Chưa đồng bộ được kết quả nước đi. Hãy tải lại trang."));
+      if (!this.cancel) this.arm(() => this.unknown("Chưa đồng bộ được kết quả hành động. Hãy tải lại trang."));
     }
   }
   dispose() { this.disposed = true; this.generation++; this.clearTimer(); }

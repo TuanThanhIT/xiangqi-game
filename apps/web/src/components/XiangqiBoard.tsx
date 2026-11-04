@@ -8,6 +8,8 @@ import type { LocalGame } from "@/features/board/local-game";
 
 import BoardView from "./BoardView";
 import type { BoardHandle } from "./BoardView";
+import Notice from "@/features/rooms/Notice";
+import BoardStage from "./BoardStage";
 const labels: Record<PieceType, string> = {
   rook: "Xe", horse: "Mã", elephant: "Tượng", advisor: "Sĩ",
   general: "Tướng", cannon: "Pháo", soldier: "Tốt",
@@ -58,29 +60,32 @@ export default function XiangqiBoard({ initialGame }: XiangqiBoardProps = {}) {
   }
 
   return (
-    <>
+    <section className="xq-game-shell" aria-label="Bàn chơi cùng thiết bị">
+    <div className="game-status" role="status" aria-live="polite" aria-atomic="true">
+      <p className="xq-turn">{finished ? "Ván đã kết thúc" : <>Đến lượt: <strong>{sideLabel}</strong></>}</p>
+      <p className="xq-sr-only">{selectedPiece
+        ? `Đang chọn: ${labels[selectedPiece.type]} ${selectedPiece.side === "black" ? "Đen" : "Đỏ"}, hàng ${selectedPiece.position.row}, cột ${selectedPiece.position.col}.`
+        : "Chưa chọn quân"}</p>
+    </div>
+    {gameStatus.status === "playing" && gameStatus.inCheck && <Notice tone="warning">Phe {sideLabel} đang bị chiếu!</Notice>}
+    {message && <Notice tone="warning">{message}</Notice>}
+    <BoardStage pieces={pieces} showCaptured={initialGame === undefined}>
+      <BoardView pieces={pieces} selectedPieceId={selectedPieceId} lastMove={lastMove} disabled={finished} onActivate={activate} onClearSelection={clearSelection} handleRef={boardRef} />
+    </BoardStage>
+    {gameStatus.status === "finished" && <section className="xq-panel xq-result" aria-label="Kết quả ván local">
+      <Notice><strong>Phe {gameStatus.winner === "red" ? "Đỏ" : "Đen"} thắng!</strong>{" "}
+        Phe {gameStatus.loser === "red" ? "Đỏ" : "Đen"} thua vì{" "}
+        {gameStatus.reason === "checkmate" ? "bị chiếu bí" : "hết nước đi hợp lệ dù không bị chiếu"}.
+      </Notice>
+    </section>}
     <div className="board-actions">
-      <button type="button" className="new-game-button" onClick={(event) => startNewGame(event.currentTarget)}>
+      <button type="button" className="xq-action xq-action--secondary" onClick={(event) => startNewGame(event.currentTarget)}>
         Ván mới
       </button>
     </div>
-    <div className="game-status" role="status" aria-live="polite" aria-atomic="true">
-      {gameStatus.status === "finished" ? (
-        <p><strong>Phe {gameStatus.winner === "red" ? "Đỏ" : "Đen"} thắng!</strong>{" "}
-          Phe {gameStatus.loser === "red" ? "Đỏ" : "Đen"} thua vì{" "}
-          {gameStatus.reason === "checkmate" ? "bị chiếu bí" : "hết nước đi hợp lệ dù không bị chiếu"}.
-        </p>
-      ) : <p>Đến lượt: <strong>{sideLabel}</strong></p>}
-      <p>{selectedPiece
-        ? `Đang chọn: ${labels[selectedPiece.type]} ${selectedPiece.side === "black" ? "Đen" : "Đỏ"}, hàng ${selectedPiece.position.row}, cột ${selectedPiece.position.col}.`
-        : "Chưa chọn quân"}</p>
-      {gameStatus.status === "playing" && gameStatus.inCheck && <p className="check-warning">Phe {sideLabel} đang bị chiếu!</p>}
-      {message && <p>{message}</p>}
-    </div>
-    <BoardView pieces={pieces} selectedPieceId={selectedPieceId} lastMove={lastMove} disabled={finished} onActivate={activate} onClearSelection={clearSelection} handleRef={boardRef} />
-    <p className="board-help">
+    <p className="board-help xq-sr-only">
       Bản thử chưa hỗ trợ hòa thỏa thuận, lặp thế hoặc chiếu dai/đuổi dai.
     </p>
-    </>
+    </section>
   );
 }

@@ -1,0 +1,138 @@
+[
+  {
+    "theme": "earth",
+    "phase": "extra",
+    "width": 1366,
+    "height": 768,
+    "board": {
+      "x": 537,
+      "y": 114,
+      "width": 552,
+      "height": 612,
+      "bottom": 726
+    },
+    "scrollX": false,
+    "scrollY": false
+  },
+  {
+    "theme": "earth",
+    "phase": "extra",
+    "width": 1920,
+    "height": 1080,
+    "board": {
+      "x": 708,
+      "y": 114,
+      "width": 764,
+      "height": 847.03125,
+      "bottom": 961.03125
+    },
+    "scrollX": false,
+    "scrollY": false
+  },
+  {
+    "theme": "earth",
+    "phase": "extra",
+    "width": 375,
+    "height": 667,
+    "board": {
+      "x": 8,
+      "y": 248,
+      "width": 359,
+      "height": 398.015625,
+      "bottom": 646.015625
+    },
+    "scrollX": false,
+    "scrollY": false
+  },
+  {
+    "theme": "earth",
+    "phase": "extra",
+    "width": 390,
+    "height": 844,
+    "board": {
+      "x": 8,
+      "y": 248,
+      "width": 374,
+      "height": 414.640625,
+      "bottom": 662.640625
+    },
+    "scrollX": false,
+    "scrollY": false
+  },
+  {
+    "test": "selected-center",
+    "dx": 0,
+    "dy": 0,
+    "scale": "matrix(1.07, 0, 0, 1.07, 0, 0)"
+  },
+  {
+    "test": "offline",
+    "width": 375,
+    "height": 667,
+    "board": {
+      "x": 53.5625,
+      "y": 348.78125,
+      "width": 267.875,
+      "height": 296.984375,
+      "bottom": 645.765625
+    },
+    "scrollX": false,
+    "scrollY": false
+  },
+  {
+    "test": "local",
+    "width": 1366,
+    "height": 768,
+    "board": {
+      "x": 417.828125,
+      "y": 102,
+      "width": 530.34375,
+      "height": 587.984375,
+      "bottom": 689.984375
+    },
+    "scrollX": false,
+    "scrollY": false
+  },
+  {
+    "test": "local",
+    "width": 1920,
+    "height": 1080,
+    "board": {
+      "x": 600,
+      "y": 102,
+      "width": 720,
+      "height": 798.25,
+      "bottom": 900.25
+    },
+    "scrollX": false,
+    "scrollY": false
+  },
+  {
+    "test": "local",
+    "width": 375,
+    "height": 667,
+    "board": {
+      "x": 8,
+      "y": 132,
+      "width": 359,
+      "height": 398.015625,
+      "bottom": 530.015625
+    },
+    "scrollX": false,
+    "scrollY": false
+  },
+  {
+    "test": "local",
+    "width": 390,
+    "height": 844,
+    "board": {
+      "x": 8,
+      "y": 132,
+      "width": 374,
+      "height": 414.640625,
+      "bottom": 546.640625
+    },
+    "scrollX": false,
+    "scrollY": false
+  }
+]

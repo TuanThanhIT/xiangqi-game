@@ -1,12 +1,23 @@
 import { createInitialPieces, getGameStatus } from "@xiangqi/rules";
 import type { GameStatus, LegalMove, Piece, Side } from "@xiangqi/rules";
 
+// Đầu hàng là sự kiện trận online, không phải kết quả suy ra từ vị trí quân.
+export type OnlineGameResult = GameStatus |
+  { status: "finished"; winner: Side; loser: Side; reason: "resignation" | "disconnect_timeout" } |
+  { status: "cancelled"; reason: "both_disconnected" };
+
 export interface RoomGame {
   pieces: Piece[];
   sideToMove: Side;
   lastMove: LegalMove | null;
   revision: number;
-  result: GameStatus;
+  result: OnlineGameResult;
+}
+
+// Service đã kiểm tra trận còn chơi; không đổi bàn, lượt hoặc nước vừa đi.
+export function resignRoomGame(game: RoomGame, side: Side): RoomGame {
+  return { ...game, revision: game.revision + 1,
+    result: { status: "finished", winner: side === "red" ? "black" : "red", loser: side, reason: "resignation" } };
 }
 
 export function createRoomGame(): RoomGame {

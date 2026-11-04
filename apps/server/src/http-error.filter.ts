@@ -1,7 +1,7 @@
 import { ArgumentsHost, Catch, ExceptionFilter, HttpException } from "@nestjs/common";
 
 const errors: Record<string, { status: number; message: string }> = {
-  INVALID_REQUEST: { status: 400, message: "Body chỉ được chứa nickname là chuỗi dài 1–30 ký tự sau khi trim." },
+  INVALID_REQUEST: { status: 400, message: "Request không đúng định dạng: kiểm tra biệt danh, phong cách và các trường được phép." },
   INVALID_ROOM_CODE: { status: 400, message: "Mã phòng không hợp lệ." },
   INVALID_JSON: { status: 400, message: "JSON không hợp lệ." },
   ROOM_NOT_FOUND: { status: 404, message: "Phòng không tồn tại." },

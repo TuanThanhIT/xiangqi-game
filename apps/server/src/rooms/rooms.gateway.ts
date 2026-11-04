@@ -7,6 +7,8 @@ import type { SeatIdentity } from "./rooms.types";
 import { SOCKET_ORIGINS, isAllowedSocketOrigin } from "./socket-origin";
 import { moveFailure } from "./move-request";
 import type { MoveAck } from "./move-request";
+import { resignFailure } from "./resign-request";
+import type { ResignAck } from "./resign-request";
 
 interface RoomSocketData { identity?: SeatIdentity }
 type RoomSocket = Socket<Record<string, never>, Record<string, (...args: unknown[]) => void>, Record<string, never>, RoomSocketData>;
@@ -107,5 +109,13 @@ export class RoomsGateway implements OnGatewayInit, OnGatewayConnection, OnGatew
   }
 
   onModuleDestroy(): void { this.unsubscribe?.(); }
+  @SubscribeMessage("game:resign")
+  handleResign(@ConnectedSocket() socket: RoomSocket, @MessageBody() payload: unknown): ResignAck {
+    try {
+      if (!socket.connected || !socket.data.identity) return resignFailure("SOCKET_NOT_ACTIVE", null);
+      return this.rooms.resign(socket.data.identity, socket.id, payload);
+    } catch { return resignFailure("INTERNAL_ERROR", null); }
+  }
+
   private channel(code: string): string { return `room:${code}`; }
 }

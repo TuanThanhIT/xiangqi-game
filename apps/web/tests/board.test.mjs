@@ -12,7 +12,7 @@ function elements(value) {
 }
 function hooks() {
   let slots = [], cursor = 0;
-  return { react: { useMemo: (fn) => fn(), useRef: (initial) => {
+  return { react: { useId: () => "board-test", useMemo: (fn) => fn(), useRef: (initial) => {
     const index = cursor++; return slots[index] ??= { current: initial };
   }, useState: (initial) => {
     const index = cursor++; if (!(index in slots)) slots[index] = typeof initial === "function" ? initial() : initial;
@@ -27,6 +27,7 @@ test("Local/development: SVG đủ 32 quân/90 giao điểm, title chuỗi đơn
   assert.equal((initialMarkup.match(/class="piece piece--/g) ?? []).length, 32);
   assert.equal((initialMarkup.match(/class="board-intersection"/g) ?? []).length, 90);
   assert.ok(initialMarkup.includes("Ván mới")); assert.ok(initialMarkup.includes("Đỏ"));
+  assert.ok(!initialMarkup.includes("Đầu hàng"));
   assert.ok(!initialMarkup.includes("<!--"));
   const fixture = load("apps/web/src/dev/endgame-fixtures.ts").createEndgameFixture;
   for (const scenario of ["checkmate", "stalemate"]) {
@@ -118,4 +119,30 @@ test("Online: chọn đúng phe, gửi ý định không sửa bàn, mất quy�
   tree = h.render(Online, props); assert.equal(view().selectedPieceId, null);
   const real = loader()("apps/web/src/features/rooms/OnlineBoard.tsx").default;
   const markup = renderToStaticMarkup(React.createElement(real, props)); assert.ok(!markup.includes("Ván mới"));
+});
+
+test("Online resign: hủy confirm không gửi/đổi trận; offline/ngoài lượt bật riêng; kết quả đúng cả hai phe", () => {
+  const h = hooks(), load = loader({ react: h.react }), Online = load("apps/web/src/features/rooms/OnlineBoard.tsx").default;
+  const game = { pieces: createInitialPieces(), sideToMove: "red", revision: 0, lastMove: null,
+    result: { status: "playing", sideToMove: "red", inCheck: false } };
+  const before = structuredClone(game); let sends = 0, confirms = 0;
+  const props = { game, side: "black", canPlay: false, canResign: true, selectionEpoch: 0, sendMove: () => false,
+    sendResign: () => { sends++; return true; } };
+  const previousWindow = globalThis.window;
+  try {
+    globalThis.window = { confirm: () => { confirms++; return false; } };
+    let tree = h.render(Online, props);
+    const button = () => elements(tree).find((e) => e.type === "button" && e.props.children === "Đầu hàng");
+    assert.equal(button().props.disabled, false); button().props.onClick(); assert.equal(sends, 0); assert.deepEqual(game, before);
+    globalThis.window.confirm = () => { confirms++; return true; }; button().props.onClick(); assert.equal(sends, 1);
+    tree = h.render(Online, { ...props, canResign: false }); assert.equal(button().props.disabled, true);
+    button().props.onClick(); assert.equal(sends, 1); assert.equal(confirms, 2);
+  } finally { globalThis.window = previousWindow; }
+  const RealOnline = loader()("apps/web/src/features/rooms/OnlineBoard.tsx").default;
+  for (const winner of ["red", "black"]) {
+    const finished = { ...game, revision: 1, result: { status: "finished", winner, loser: winner === "red" ? "black" : "red", reason: "resignation" } };
+    const markup = renderToStaticMarkup(React.createElement(RealOnline, { ...props, game: finished, canResign: false }));
+    assert.ok(markup.includes(`${winner === "red" ? "Đỏ" : "Đen"} thắng do đối thủ đầu hàng.`));
+    assert.equal((markup.match(/aria-disabled="true"/g) ?? []).length, 90); assert.ok(!markup.includes("Ván mới"));
+  }
 });

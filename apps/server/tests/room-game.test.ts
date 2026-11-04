@@ -47,7 +47,7 @@ test("Game: chỉ tạo khi join; khai cuộc mới, revision 0 và snapshot đ�
   assert.equal(state.game!.lastMove, null); assert.equal(state.playEnabled, false);
   state.game!.pieces[0].position.row = 9;
   assert.equal(service.publicGameState("ABC234").game!.pieces[0].position.row, 0);
-  assert.deepEqual(Object.keys(state).sort(), ["game", "playEnabled", "roomCode"]);
+  assert.deepEqual(Object.keys(state).sort(), ["deadlines", "game", "playEnabled", "roomCode", "serverNow"]);
   assert.deepEqual(Object.keys(state.game!).sort(), ["lastMove", "pieces", "result", "revision", "sideToMove"]);
 });
 
@@ -81,7 +81,7 @@ test("Game: luân phiên, ăn quân, lastMove/revision; dữ liệu cũ không b
 test("Game: runtime validation đầy đủ, sai lượt/luật/ID/revision không đổi bàn", () => {
   const s = setup(); const before = structuredClone(s.room().game);
   const valid = request();
-  for (const payload of [null, [], {}, { ...valid, requestId: "bad" }, { ...valid, requestId: randomUUID().replace(/-4/, "-1") },
+  for (const payload of [null, [], {}, { ...valid, requestId: "bad" }, { ...valid, requestId: "00000000-0000-1000-8000-000000000000" },
     { ...valid, expectedRevision: -1 }, { ...valid, expectedRevision: 0.5 }, { ...valid, expectedRevision: Number.MAX_SAFE_INTEGER + 1 },
     { ...valid, pieceId: "" }, { ...valid, pieceId: "a".repeat(65) }, { ...valid, pieceId: 1 },
     { ...valid, to: null }, { ...valid, to: { row: 10, col: 0 } }, { ...valid, to: { row: 5, col: -1 } },
@@ -161,6 +161,10 @@ test("Game: nước cuối chiếu bí/hết nước, retry ack cuối; không c
     assert.equal(s.service.publicGameState("ABC234").playEnabled, false);
     assert.deepEqual(s.service.move(s.red, "r", req), ack);
     error(s.service.move(s.black, "b", request("bg", 0, 3, 1)), "GAME_FINISHED");
+    const resignation = s.service.resign(s.red, "r", { requestId: randomUUID() });
+    assert.ok(!resignation.ok && resignation.code === "GAME_FINISHED");
+    assert.equal(s.room().game!.result.status, "finished");
+    assert.equal((s.room().game!.result as { reason: string }).reason, reason);
     assert.equal(s.room().game!.revision, 1);
   }
 });

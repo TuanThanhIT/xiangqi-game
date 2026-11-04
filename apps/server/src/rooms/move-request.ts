@@ -21,7 +21,6 @@ export const moveErrors = {
 export type MoveError = keyof typeof moveErrors;
 export type MoveAck = { ok: true; requestId: string; appliedRevision: number } |
   { ok: false; requestId: string | null; code: MoveError; message: string; currentRevision?: number };
-export interface CachedMove { request: MoveRequest; ack: MoveAck }
 function object(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }

@@ -8,7 +8,41 @@ Frontend Next.js dùng TypeScript, App Router, thư mục `src`, ESLint và CSS 
 
 Trận kết thúc khi bên đến lượt hết nước hợp lệ: bị chiếu là chiếu bí, không bị chiếu vẫn thua vì hết nước (không hòa như cờ vua). Sau kết thúc không thể chọn/đi quân, vẫn điều hướng bàn phím được. Nút “Ván mới” tạo lại khai cuộc; hỏi xác nhận nếu đã đi và trận chưa kết thúc, hủy sẽ giữ nguyên trận.
 
-Trạng thái local chỉ nằm trong bộ nhớ trình duyệt, tải lại trang sẽ mất ván. Chơi qua mạng nằm riêng tại `/play`; server giữ bàn trong bộ nhớ và có thể tiếp tục sau reconnect bằng phiên ghế còn hợp lệ.
+Trang `/` là menu chính nền tối với điểm nhấn đỏ son/vàng đồng. Bàn local nằm tại `/local`: trạng thái chỉ nằm trong bộ nhớ trình duyệt, tải lại hoặc rời trang sẽ mất ván. Chơi qua mạng nằm riêng tại `/play`; server giữ bàn trong bộ nhớ và có thể tiếp tục sau reconnect bằng phiên ghế còn hợp lệ.
+
+### Năm phong cách phòng miễn phí
+
+Màn hình trận đã có header/sidebar gọn, kích thước bàn theo chiều cao viewport
+và hình quân 2.5D nhẹ. Selected nâng/phóng quanh tâm; focus và lastMove là dấu
+tròn riêng. Xem [số đo, ảnh trước/sau và giới hạn kiểm chứng](docs/design/COMPACT.md).
+
+Người tạo chọn Đất cát, Thảo nguyên, Thủy mặc, Trúc lâm hoặc Tuyết sơn trên form
+tạo phòng. Người vào phòng không chọn lại: server giữ `themeId`, gửi qua
+`room:state`; reconnect/reload tiếp tục cùng phong cách. Phiên lưu không chứa
+theme. Trước snapshot phòng hợp lệ, giao diện trung tính và chưa mở thao tác bàn.
+Menu giữ nhận diện chung, `/local` mặc định Đất cát, không có bộ chọn.
+
+`POST /rooms` nhận `{ "nickname": "Người chơi", "themeId": "bamboo" }`;
+thiếu `themeId` dùng `earth`. Join chỉ nhận nickname, không chấp nhận ghi đè theme.
+Chỉ năm ID cố định; không nhận URL/path/CSS. Theme không thuộc `game:state`,
+không đổi revision, token, luật hoặc quyền ghế. Cần chạy lại cả web/backend
+với hợp đồng mới. Không thêm dependency cho chức năng này.
+
+Ảnh phong cảnh/texture WebP đặt trong `apps/web/public/themes`; khung, sông/sóng
+tĩnh và lưới là SVG/CSS. Quân Đen/Đỏ đều viền kép liền; chữ Hán và tên truy cập
+tiếng Việt được giữ. Xem [quy chuẩn, screenshot và giới hạn nghiệm thu](THEMES.md)
+và [nguồn asset](apps/web/public/themes/README.md).
+
+### Menu và điều hướng sau trận
+
+- `/`: menu có Tạo phòng (`/play?mode=create`), Vào phòng (`/play?mode=join`), Chơi cùng thiết bị (`/local`) và Tiếp tục phòng khi đọc được phiên lưu hợp lệ.
+- Menu chỉ đọc/validate storage sau mount, không tạo socket hoặc gửi POST. Tiếp tục phòng mở `/play`; bấm xác nhận tiếp tục tại đây để backend xác thực và nhận snapshot mới nhất. Phiên hợp lệ ở storage chưa bảo đảm token vẫn được server chấp nhận.
+- Nếu đang giữ phiên cũ, cả lối Tạo phòng và Vào phòng đều ưu tiên màn hình phiên đã lưu. Tạo phòng mới vẫn phải qua xác nhận và luồng đồng bộ/đầu hàng ván cũ; không ghi đè token hoặc tự tạo phòng. Hủy xác nhận giữ nguyên phiên.
+- Kết quả online (chiếu bí, hết nước, đầu hàng, timeout hoặc hủy) có hai nút ngay dưới thông báo. Về menu dọn socket/listener/timer, xóa đúng credentials cũ rồi dùng Next.js router về `/`, không reload. Tạo phòng mới dọn tương tự rồi mở riêng form tạo phòng, không gửi đầu hàng lại hoặc POST tự động. Bàn kết thúc vẫn xem được bằng bàn phím trước khi rời.
+- Khi chưa kết thúc không có nút Về menu mới trong bàn online. Lỗi đồng bộ/mất quyền giữ cơ chế phục hồi hiện có. Nếu tab khác đã lưu phiên mới, cleanup không xóa phiên đó; khi mở form vẫn ưu tiên màn hình tiếp tục của phiên mới. Storage bị chặn sẽ báo lỗi thay vì giả vờ đã xóa.
+- Đánh với máy, tài khoản/hồ sơ, bảng xếp hạng, bộ sưu tập nhân vật và cửa hàng/phần thưởng chỉ là nhãn khóa/sắp ra mắt, chưa có tính năng, giá, số dư hoặc hành động. Chưa thêm nhân vật, skin hay hoạt ảnh chiến đấu.
+
+Socket và state phiên hoạt động vẫn thuộc `useRoomSession` trong `/play`, không có provider phiên dùng chung giữa route. Menu không import hook socket. Chuyển route sẽ unmount và cleanup; không tự nối lại từ menu. Các trang development local vẫn dùng bàn local như trước.
 
 Backend NestJS có `GET /health`, API tạo/vào phòng trong bộ nhớ và Socket.IO xác thực ghế/trạng thái kết nối tại cổng 3001. Có allowlist origin riêng cho Socket.IO; chưa bật CORS cho HTTP API, chưa có database. Backend quản lý một trận mỗi phòng và xác thực nước đi bằng rules qua Socket.IO; frontend `/play` hiển thị bàn online theo snapshot server. Workspace rules đã có kiểu dữ liệu, thế khai cuộc, hình học bảy quân, kiểm tra chiếu và an toàn của Tướng, xác thực nước đi, liệt kê nước hợp lệ và xác định kết thúc trận. Đây là luật đã hỗ trợ cho bản thử, chưa phải toàn bộ luật thi đấu: chưa hỗ trợ hòa thỏa thuận, lặp thế, chiếu dai/đuổi dai.
 
@@ -38,7 +72,7 @@ Lệnh `dev:web` ở gốc build rules trước, rồi gọi script `dev` của 
 
 ## Phòng chờ tại /play
 
-Trang `/play` cho nhập biệt danh để tạo phòng hoặc nhập thêm mã để vào phòng. HTTP đi qua hai Route Handler cố định của Next.js (`/api/rooms`, `/api/rooms/[code]/join`), Socket.IO kết nối trực tiếp backend namespace `/rooms`. Trang `/` và các trang kiểm tra kết thúc local giữ nguyên.
+Trang `/play` cho nhập biệt danh để tạo phòng hoặc nhập thêm mã để vào phòng; query `mode=create`/`mode=join` chỉ chọn form, không mang credentials hoặc tự gửi request. HTTP đi qua hai Route Handler cố định của Next.js (`/api/rooms`, `/api/rooms/[code]/join`), Socket.IO kết nối trực tiếp backend namespace `/rooms`. Bàn local tại `/local` và các trang kiểm tra kết thúc local giữ nguyên logic chơi.
 
 Tạo `apps/web/.env.local` trên máy từ `apps/web/.env.example` (không commit `.env.local`):
 
@@ -59,29 +93,37 @@ npm.cmd run dev:server
 npm.cmd run dev:web
 ```
 
-Frontend phải chạy tại `http://localhost:3000` hoặc `http://127.0.0.1:3000` theo allowlist socket hiện tại. Mở `/play` ở hai cửa sổ độc lập: A tạo phòng, sao chép mã; B nhập mã và biệt danh để vào. Chưa có trận thì hiện phòng chờ; khi người thứ hai giữ ghế và nhận snapshot, hiện bàn online, Đỏ đi trước. Ghế offline vẫn được giữ, không trở thành ghế trống.
+Frontend phải chạy tại `http://localhost:3000` hoặc `http://127.0.0.1:3000` theo allowlist socket hiện tại. Thử hai người bằng hai profile khác nhau (ví dụ cửa sổ thường và ẩn danh): A tạo phòng, sao chép mã; B nhập mã và biệt danh để vào. Hai tab cùng profile/origin dùng chung một phiên, phù hợp để thử tiếp tục/thay ghế. Chưa có trận thì hiện phòng chờ; khi người thứ hai giữ ghế và nhận snapshot, hiện bàn online, Đỏ đi trước. Ghế offline vẫn được giữ, không trở thành ghế trống.
 
-Phiên mỗi tab lưu trong `sessionStorage`, được kiểm tra runtime trước khi dùng; reload chỉ kết nối socket lại, không POST lại. JavaScript cùng origin đọc được token; không coi sessionStorage là kho bí mật chống XSS. Nhân bản tab có thể sao chép phiên ban đầu và thay socket tab cũ. Khi bị `room:replaced` hoặc xác thực thất bại, client dừng reconnect và xóa credentials; nếu browser chặn xóa/ghi storage sẽ báo cần xóa dữ liệu trang/đóng tab. Nếu ghi storage thất bại, phiên chỉ giữ trong bộ nhớ và reload có thể mất ghế.
+Phiên gần nhất lưu trong `localStorage`, dùng chung cho mỗi browser profile/origin, được kiểm tra runtime sau khi component mount. Khi mở/reload `/play`, nếu có phiên hợp lệ hiện mã phòng, biệt danh, phe đã lưu và hai nút “Tiếp tục phòng”, “Tạo phòng mới”; chưa tạo socket hoặc POST tạo/join. Bấm tiếp tục mới xác thực ghế và nhận snapshot hiện tại trước khi tương tác. Sau tạo/join mới thành công vẫn lưu phiên và kết nối ngay. Mất mạng trong tab đang chơi vẫn tự reconnect, không cần bấm tiếp tục mỗi lần.
+
+“Tạo phòng mới” hỏi: “Nếu ván cũ còn diễn ra, bạn sẽ đầu hàng để tạo phòng mới.” Hủy không kết nối/gửi request hoặc đổi phiên. Đồng ý sẽ kết nối tạm phiên cũ, không cho đi quân, chờ xác thực và snapshot mới. Nếu còn chơi, gửi đầu hàng qua pending/retry hiện có (không cần đúng lượt/đối thủ online); chỉ bỏ phiên khi nhận snapshot kết thúc hợp lệ, kể cả chiếu bí/hết nước xảy ra trong lúc xử lý. Ack một mình không đủ. Phòng chưa có trận hoặc trận đã kết thúc thì bỏ phiên ngay sau đồng bộ. Sau đó chỉ mở form, không POST tạo phòng tự động. Không xóa phòng/giải phóng ghế trên server.
+
+AUTH_FAILED chỉ xóa credentials khớp và về form, không kết luận phòng không tồn tại. Lỗi mạng, timeout request, payload sai hoặc hết retry giữ token để tải lại/phục hồi, không khởi động thêm luồng chồng lên. Khi rời phiên đã xử lý xong, dọn timer/listener và ngắt socket; nếu tab khác đã lưu phiên mới thì giữ nguyên phiên đó và hiện màn hình tiếp tục của nó. Chỉ có nút rời trực tiếp sau kết thúc/hủy, chưa có khi trận còn chơi. Trận bị hủy cũng được coi là đã kết thúc khi mở form mới, không gửi đầu hàng.
+
+Phiên sessionStorage cũ được chuyển sang localStorage khi không có phiên local hợp lệ; chỉ xóa bản cũ sau khi ghi thành công. Nếu hai nơi khác phiên, ưu tiên localStorage hợp lệ, không ghi đè nó. Nếu storage bị chặn, có cảnh báo không bảo đảm khôi phục sau đóng tab; bản cũ chưa migrate được vẫn được giữ. JavaScript cùng origin đọc được token, nên localStorage không phải kho bí mật chống XSS; localhost và 127.0.0.1 là hai origin khác nhau.
+
+Mở tab mới chưa thay tab đang chơi; chỉ sau khi bấm “Tiếp tục phòng” và backend xác thực thì socket mới thay socket cũ. `room:replaced` dừng tab cũ nhưng giữ phiên dùng chung, không tự giành lại ghế. Không kết nối hoặc cập nhật phiên tự động qua storage event; khi bấm tiếp tục sẽ đọc lại storage, nếu credentials đã đổi thì hiện thông tin mới để người dùng duyệt bằng lần bấm tiếp theo. `AUTH_FAILED` chỉ xóa phiên khớp roomCode/token đã bị từ chối, không xóa phiên mới của tab khác. Callback cũ bị chặn; lỗi mạng/timeout không xóa phiên. Nếu xóa credentials bị chặn sẽ báo cần xóa dữ liệu trang. Server restart vẫn làm mất phòng/trận và vô hiệu token đã lưu.
 
 POST chỉ chạy từ submit, có khóa chống gửi trùng và timeout: 8 giây proxy, 12 giây browser. Không tự retry: timeout/mất response có thể xảy ra sau khi backend đã giữ ghế, và hiện chưa có cơ chế lấy lại token bị mất. Proxy chỉ gửi JSON nickname và Content-Type, không chuyển cookie/header browser; response no-store. Socket đăng ký listener trước connect, cleanup khi unmount, xác nhận phe sau `room:session` và loại callback của socket cũ. Thông tin snapshot lúc mất kết nối là dữ liệu lần gần nhất.
 
-Thử thủ công: nickname/mã sai, người thứ ba nhận ROOM_FULL, reload không tạo phòng mới, đóng cửa sổ thấy offline, nhân bản tab thấy tab cũ bị thay thế, dừng backend/khởi động lại, clipboard/storage bị chặn, phím Tab/Enter và chiều rộng 375px. Không dán token vào URL, console hoặc ảnh chụp công khai.
+Thử thủ công: nickname/mã sai, người thứ ba nhận ROOM_FULL, đóng/mở hoặc reload chỉ hiện tiếp tục mà không tự kết nối/POST, bấm tiếp tục nhận lại đúng bàn/lượt/kết quả, mở tab mới chưa thay tab cũ đến khi bấm tiếp tục, tab bị thay không xóa phiên chung, mất mạng tự reconnect, backend restart, clipboard/storage bị chặn, phím Tab/Enter và chiều rộng 375px. Không dán token vào URL, console hoặc ảnh chụp công khai.
 
 ### Bàn online và phục hồi nước đang chờ
 
-`BoardView` dùng chung phần SVG, vùng tương tác và focus bàn phím cho local/online. Local giữ logic và nút “Ván mới” riêng; online không có nút này. Bàn, lượt, nước vừa đi, chiếu và kết quả online lấy từ `game:state`; không cập nhật bàn trước khi server trả snapshot. Chỉ chọn quân mình khi đúng lượt, cả hai online, socket đã xác thực/đồng bộ và không có request chờ. Khi bị khóa vẫn dùng phím mũi tên để xem bàn.
+`BoardView` dùng chung phần SVG, vùng tương tác và focus bàn phím cho local/online. Local giữ logic và nút “Ván mới” riêng; online không có nút này. Bàn, lượt, nước vừa đi, chiếu và kết quả online lấy từ `game:state`; không cập nhật bàn trước khi server trả snapshot. Chỉ chọn quân mình khi đúng lượt, cả hai online, socket đã xác thực/đồng bộ và không có request chờ. Khi bị khóa vẫn dùng phím mũi tên để xem bàn. Nút “Đầu hàng” chỉ có ở online, hỏi xác nhận bằng window.confirm; hủy không gửi hoặc đổi trận. Được đầu hàng ngoài lượt hoặc khi đối thủ offline, nhưng bản thân phải đang kết nối, xác thực, đồng bộ và trận còn chơi.
 
-Mỗi ý định đi quân giữ cố định UUID v4, revision và đích. Timeout ack 5 giây, tối đa 3 lần gửi tổng cộng; retry không sửa payload hoặc expectedRevision. Không emit khi disconnected và dùng volatile emit để không để Socket.IO buffer nước đi ngoài luồng retry này. Reconnect phải xác thực và nhận snapshot trước khi thử lại request cũ. Ack thành công chỉ hoàn thành khi đã có snapshot đạt revision tương ứng; snapshot một mình không xác nhận request thành công.
+Move và resign dùng chung khóa pending: không gửi hành động mới khi hành động trước đang chờ hoặc chưa rõ kết quả. Mỗi ý định đi quân giữ cố định UUID v4, revision và đích; đầu hàng chỉ gửi `{ requestId }`, không gửi expectedRevision. Timeout ack 5 giây, tối đa 3 lần gửi tổng cộng; retry không sửa ID, loại hành động hoặc payload. Không emit khi disconnected và dùng volatile emit để không để Socket.IO buffer hành động ngoài luồng retry này. Reconnect phải xác thực và nhận snapshot trước khi thử lại request cũ. Ack thành công chỉ hoàn thành khi đã có snapshot đạt revision tương ứng; snapshot một mình không xác nhận request thành công. Ack move phải tăng một revision so với yêu cầu, còn ack resign có thể tăng nhiều hơn so với snapshot client trước đó nếu có nước đi khác được server xử lý trước.
 
-Cùng revision vẫn nhận `playEnabled` mới. Nội dung trận được so sánh theo giá trị và ID quân, không theo tham chiếu/thứ tự key; revision lùi hoặc cùng revision khác bàn được coi là lỗi đồng bộ, khóa tương tác và yêu cầu tải lại. Snapshot cũ vẫn được đối chiếu sau reconnect.
+Cùng revision vẫn nhận `playEnabled`, `serverNow` và `deadlines` mới. Nội dung trận được so sánh theo giá trị và ID quân, không theo tham chiếu/thứ tự key; revision lùi hoặc cùng revision khác bàn/kết quả được coi là lỗi đồng bộ, khóa tương tác và yêu cầu tải lại. Snapshot cũ vẫn được đối chiếu sau reconnect.
 
-Hết retry hiện “Chưa xác định được kết quả nước đi”, giữ khóa và nút “Tải lại trang”; không suy đoán thành công từ lastMove. Ack từ chối cần revision mới hơn sẽ chờ đồng bộ tối đa 5 giây, sau đó cũng khóa và hướng dẫn tải lại. `STALE_REVISION` sau retry không chứng minh lần gửi đầu đã thất bại. Pending chỉ giữ trong bộ nhớ: tải lại bỏ pending, khôi phục phiên ghế từ sessionStorage và nhận bàn hiện tại, không POST tạo/join hoặc tự gửi lại nước cũ. Nếu storage không ghi được phiên thì tải lại có thể mất credentials như giới hạn đã nêu.
+Hết retry hiện “Chưa xác định được kết quả nước đi” hoặc “Chưa xác định được kết quả đầu hàng”, giữ khóa và nút “Tải lại trang”; không suy đoán thành công từ lastMove. Ack từ chối cần revision mới hơn sẽ chờ đồng bộ tối đa 5 giây, sau đó cũng khóa và hướng dẫn tải lại. `STALE_REVISION` sau retry không chứng minh lần gửi đầu đã thất bại. Pending chỉ giữ trong bộ nhớ: tải lại bỏ pending, hiện phiên localStorage để bấm “Tiếp tục phòng” rồi nhận bàn hiện tại, không POST tạo/join hoặc tự gửi lại hành động cũ. Nếu storage không ghi được phiên thì tải lại có thể mất credentials như giới hạn đã nêu.
 
 Kiểm tra frontend bằng công cụ hiện có, không thêm framework:
 
 ```powershell
 npm.cmd run build:rules
-node --test apps/web/tests/online-game.test.mjs apps/web/tests/board.test.mjs apps/web/tests/room-hook.test.mjs
+node --test apps/web/tests/*.test.mjs
 npm.cmd run lint --workspace=@xiangqi/web
 npm.cmd run build:web
 ```
@@ -188,9 +230,23 @@ Test backend hiện có chạy cả HTTP và socket: xác thực, phòng cách l
 
 ## Trận online ở backend
 
-RoomsService vẫn giữ Map phòng duy nhất. Mỗi phòng có `game: null` khi chỉ có Đỏ; khi Đen giữ ghế thành công, server tạo 32 quân mới, Đỏ đi trước, `revision: 0`. Trận gồm `pieces`, `sideToMove`, `lastMove` (`{ pieceId, from, to }` hoặc `null`), `revision` và `result` theo `GameStatus` của rules.
+RoomsService vẫn giữ Map phòng duy nhất. Mỗi phòng có `game: null` khi chỉ có Đỏ; khi Đen giữ ghế thành công, server tạo 32 quân mới, Đỏ đi trước, `revision: 0`. Trận gồm `pieces`, `sideToMove`, `lastMove` (`{ pieceId, from, to }` hoặc `null`), `revision` và `result` theo `OnlineGameResult` của backend: `GameStatus` từ rules, kết quả đầu hàng `resignation`, mất kết nối quá hạn `disconnect_timeout` hoặc hủy `cancelled`.
 
-Server phát event riêng `game:state` với `{ roomCode, game, playEnabled }`, không thay đổi hợp đồng `room:state`. Snapshot là bản sao công khai, không có token, socket ID hoặc cache. `playEnabled` chỉ đúng khi trận còn chơi và hai socket hiện hành đã attach xong; nó không thay thế kiểm tra lượt. Connect/reconnect nhận `room:session` trước trạng thái hiện tại. Offline chỉ tạm ngừng chơi, không đổi bàn, revision hoặc xử thua; cả hai online lại thì tiếp tục.
+Server phát event riêng `game:state` với `{ roomCode, game, playEnabled, serverNow, deadlines: { red, black } }`, không thay đổi hợp đồng `room:state`. serverNow/deadline dùng Unix milliseconds; deadline không có là null. Snapshot là bản sao công khai, không có token, socket ID, timer hoặc cache. `playEnabled` chỉ đúng khi trận còn chơi và hai socket hiện hành đã attach xong; nó không thay thế kiểm tra lượt. Connect/reconnect nhận `room:session` và trạng thái hiện tại. Offline khóa đi quân và có thời hạn 60 giây theo phần dưới.
+
+### Mất kết nối quá hạn 60 giây
+
+Chỉ trận đã bắt đầu và còn chơi mới áp dụng. Server ghi deadline riêng của mỗi ghế offline bằng now + 60.000ms (kể cả ghế chưa online lúc trận được tạo). Phòng chỉ có một người, chưa có trận thì không có deadline. Trở lại trước hạn xóa deadline; now >= deadline là quá hạn. Người trở lại muộn vẫn xem được trạng thái nhưng dấu quá hạn được giữ nguyên trong trận đó.
+
+Một ghế quá hạn và ghế kia online: bên quá hạn thua, kết quả `{ status: "finished", winner, loser, reason: "disconnect_timeout" }`. Nếu cả hai offline thì giữ hai deadline, chưa xử thắng. Khi cả hai deadline đều hết: `{ status: "cancelled", reason: "both_disconnected" }`, không có winner/loser, kể cả một người đã quay lại muộn. Ví dụ Đỏ hết hạn 60s, Đen 70s: Đỏ quay lại 65s không được đi quân; Đen quay lại trước 70s thì Đen thắng, nếu không thì hủy ở 70s.
+
+RoomsService đánh giá trạng thái cũ trước reconnect/move/resign; sau cập nhật kết nối lại đánh giá lần nữa. Không xóa deadline đã hết để cứu trận. Thay tab chỉ thay socket hiện hành, không tạo offline giả. Callback timer kiểm tra phòng/version hiện tại; deadline đã hết không bị đặt timer lặp liên tục. Timer được dọn khi kết thúc/hủy hoặc app đóng. Clock/scheduler có thể thay trong test nội bộ, không có endpoint hoặc tham số công khai điều khiển thời gian.
+
+Kết thúc/hủy tăng revision đúng một lần, giữ pieces/sideToMove/lastMove. Online/offline và cập nhật deadline không tăng revision. Trận đã kết thúc/hủy không bị ghi đè, kể cả callback muộn. Retry move/resign đã thành công vẫn nhận ack cũ từ cache sau timeout; hành động mới nhận GAME_FINISHED.
+
+Frontend dùng serverNow và thời điểm nhận snapshot để hiển thị thời gian còn lại gần đúng; reconnect nhận deadline hiện tại, không đếm lại 60 giây. Đồng hồ về 0 chỉ báo đang chờ server xác nhận; không tự xử thắng/thua/hủy. Kết quả timeout hiển thị thắng do đối thủ mất kết nối quá thời hạn; cancelled hiển thị “Trận đã hủy vì cả hai người chơi mất kết nối quá thời hạn”, không có người thắng. Mọi kết quả kết thúc/hủy khóa đi quân/đầu hàng nhưng vẫn xem bàn bằng bàn phím. “Tiếp tục phòng” xem được kết quả; “Tạo phòng mới” bỏ trận hủy sau đồng bộ, không đầu hàng.
+
+Test dùng clock/scheduler giả, không chờ thật 60 giây: trước/đúng/sau hạn, hai thời hạn lệch nhau, người quay lại muộn, hủy trước reconnect, timer trễ/cũ, thay tab, cạnh tranh nước cuối/đầu hàng, idempotency và cleanup. Socket test kiểm tra phát deadline/kết quả tới đối thủ và reconnect xem lại. Đây không phải đồng hồ lượt; chưa có database, chơi lại hoặc cơ chế xử lý qua nhiều process. Restart server vẫn mất phòng/trận.
 
 Client gửi `game:move` kèm callback acknowledgement, không gửi phe, phòng hoặc bàn cờ:
 
@@ -219,11 +275,31 @@ Ack thất bại, ví dụ bàn đã cũ:
 
 `requestId` là `null` khi payload không hợp lệ hoặc socket không còn quyền/chưa attach; `currentRevision` có khi server biết revision trong bước xử lý. Các mã lỗi: `INVALID_MOVE_REQUEST`, `SOCKET_NOT_ACTIVE`, `GAME_NOT_STARTED`, `PLAYERS_OFFLINE`, `GAME_FINISHED`, `STALE_REVISION`, `NOT_YOUR_TURN`, `ILLEGAL_MOVE`, `REQUEST_ID_CONFLICT`, `INTERNAL_ERROR`. Thông báo cố định không phản chiếu dữ liệu bí mật hoặc stack.
 
-Mỗi ghế giữ tối đa 256 request mới đúng định dạng gần nhất, gồm payload chuẩn hóa và ack (cả thành công và bị từ chối); request không hợp lệ hoặc socket không có quyền không được lưu. Cache không bị mất khi thay socket/reconnect. Cùng ID/cùng payload trả lại ack cũ trước kiểm tra lượt/revision/kết thúc, không đi lại hoặc phát snapshot lại. Cùng ID/khác payload trả `REQUEST_ID_CONFLICT`. Một yêu cầu mới phải dùng ID mới; retry giữ nguyên cả ID và payload. Sau eviction, nước từng thành công vẫn không thể áp dụng lại do expectedRevision đã cũ. Ack cũ có thể chứa revision cũ; snapshot hiện tại mới là bàn đang chơi.
+Mỗi ghế giữ tối đa 256 hành động mới đúng định dạng gần nhất, dùng chung cho move/resign, gồm loại hành động, payload chuẩn hóa và ack (cả thành công và bị từ chối); request không hợp lệ hoặc socket không có quyền không được lưu. Cache không bị mất khi thay socket/reconnect. Cùng ID/cùng loại/cùng payload trả lại ack cũ trước kiểm tra lượt/revision/kết thúc, không đi lại hoặc phát snapshot lại. Cùng ID nhưng khác loại hoặc payload trả `REQUEST_ID_CONFLICT`, không ghi đè entry cũ. Một yêu cầu mới phải dùng ID mới; retry giữ nguyên cả ID và payload. Sau eviction, nước từng thành công vẫn không thể áp dụng lại do expectedRevision đã cũ. Ack cũ có thể chứa revision cũ; snapshot hiện tại mới là bàn đang chơi.
 
 Không có `await` giữa kiểm tra và ghi trạng thái. Server gọi `isLegalMove`, tạo bàn mới/loại quân bị ăn, đổi lượt, ghi lastMove và tính `getGameStatus` trước khi commit trạng thái, tăng revision đúng một lần và phát snapshot. Không cho ăn Tướng; chiếu bí và hết nước đều là thua cho phe đến lượt. Lỗi tính toán trả `INTERNAL_ERROR` và giữ nguyên bàn. Request cạnh tranh cùng revision tối đa một nước thành công trong một process.
 
-Frontend `/play` gửi `game:move` và hiển thị `game:state` theo quy trình pending/snapshot ở trên. Chưa có chơi lại online, đầu hàng, hòa, đồng hồ, lặp thế, chiếu dai/đuổi dai, lưu bền hoặc cơ chế bảo đảm giao sự kiện sau restart.
+Frontend `/play` gửi `game:move`, `game:resign` và hiển thị `game:state` theo quy trình pending/snapshot ở trên. Kết quả đầu hàng hiển thị “Đỏ/Đen thắng do đối thủ đầu hàng”; sau kết thúc khóa cả đi quân và đầu hàng. Chưa có chơi lại online, hòa, đồng hồ, lặp thế, chiếu dai/đuổi dai, lưu bền hoặc cơ chế bảo đảm giao sự kiện sau restart.
+
+### Đầu hàng online — backend
+
+Event `game:resign` nhận đúng một trường UUID v4, chuẩn hóa chữ thường; không nhận `expectedRevision`, phe hoặc mã phòng:
+
+```json
+{ "requestId": "550e8400-e29b-41d4-a716-446655440000" }
+```
+
+Chỉ socket hiện hành đã xác thực và attach được yêu cầu đầu hàng; kiểm tra quyền trước tra cache. Trận phải đã bắt đầu và còn chơi. Được đầu hàng ngoài lượt, khi đang bị chiếu hoặc khi đối thủ offline. Không phụ thuộc thế cờ nên không cần expectedRevision. Server giữ nguyên pieces, sideToMove và lastMove; chỉ ghi kết quả `{ status: "finished", winner, loser, reason: "resignation" }` và tăng revision một lần. Đầu hàng trước nước đầu có revision 1 nhưng lastMove vẫn null. Snapshot phát tới phòng có `playEnabled: false`; reconnect/online/offline không tính lại kết quả bằng getGameStatus.
+
+Ack thành công có `{ "ok": true, "requestId": "<UUID-v4>", "appliedRevision": 1 }`. Ack lỗi có `{ "ok": false, "requestId": "<UUID-v4-hoặc-null>", "code": "GAME_FINISHED", "message": "Trận đã kết thúc.", "currentRevision": 1 }`; currentRevision chỉ có khi biết revision, requestId null khi socket không đủ quyền hoặc payload sai. Các mã: `INVALID_RESIGN_REQUEST`, `SOCKET_NOT_ACTIVE`, `GAME_NOT_STARTED`, `GAME_FINISHED`, `REQUEST_ID_CONFLICT`, `INTERNAL_ERROR`. Lỗi bất ngờ không lộ chi tiết nội bộ hoặc ghi một phần trạng thái.
+
+Cache 256 hành động mỗi ghế phân biệt `kind: "move" | "resign"`. Retry đầu hàng cùng ID còn trong cache trả ack cũ, không tăng revision hoặc phát snapshot lại; cùng ID dùng giữa move/resign bị xung đột theo cả hai chiều. Sau eviction, retry đầu hàng nhận GAME_FINISHED vì trận đã kết thúc, không áp dụng lần hai; không còn đảm bảo trả lại ack thành công ban đầu. Giới hạn này dựa trên việc chưa có chơi lại trong cùng phòng.
+
+Service xử lý đồng bộ, không await giữa kiểm tra và ghi. Nếu đầu hàng được xử lý trước, nước đi mới bị GAME_FINISHED. Nếu nước đi hợp lệ được xử lý trước và trận còn chơi, đầu hàng áp dụng sau và tăng thêm một revision; nếu nước đi đã chiếu bí/hết nước thì đầu hàng bị từ chối. Hai người đầu hàng cạnh tranh: chỉ người có yêu cầu được server xử lý trước thua, người còn lại thắng. Retry nước đi cũ đã thành công vẫn được trả ack từ cache sau kết thúc.
+
+Frontend đã hỗ trợ snapshot resignation và nút đầu hàng riêng cho online. Validator cho phép loser khác sideToMove, revision dương với lastMove null khi resignation, đồng thời vẫn kiểm tra winner/loser khác nhau, playEnabled false và snapshot cùng revision phải nhất quán theo nội dung. Giao diện hiển thị lý do đầu hàng riêng. Không sửa getGameStatus hoặc luật trong package rules cho sự kiện này.
+
+Test backend bao phủ cả hai phe, ngoài lượt/offline, validation, giữ bàn/lượt/lastMove, retry/reconnect, socket cũ/chưa attach, cache chung/eviction/xung đột, cạnh tranh move/resign/hai bên đầu hàng, cách ly phòng và snapshot không chứa bí mật. Test socket có timeout và dọn app/client trong finally. Test frontend bổ sung hủy xác nhận, khóa chung move/resign, ack/snapshot, timeout/reconnect, đồng hồ hiển thị và trận hủy. Chưa có chơi lại hoặc database.
 
 ## Cấu trúc và vai trò
 
@@ -297,7 +373,7 @@ Production build theo thứ tự rules → server/web bằng các lệnh trên; 
 
 ## Kiểm tra kết thúc trận trong development (tạm thời)
 
-Chạy `npm.cmd run dev:web`, mở `/dev/endgame/checkmate` hoặc `/dev/endgame/stalemate` trên địa chỉ server được terminal thông báo. Hai trang dùng fixture đã kiểm tra trong rules, đều có Đen đến lượt và Đỏ thắng. Route sai hoặc môi trường production trả 404. Trang `/` vẫn khởi tạo khai cuộc bình thường.
+Chạy `npm.cmd run dev:web`, mở `/dev/endgame/checkmate` hoặc `/dev/endgame/stalemate` trên địa chỉ server được terminal thông báo. Hai trang dùng fixture đã kiểm tra trong rules, đều có Đen đến lượt và Đỏ thắng. Route sai hoặc môi trường production trả 404. Trang `/` là menu; `/local` vẫn khởi tạo khai cuộc bình thường.
 
 Kiểm tra thông báo lý do thắng, bấm/Enter/Space không làm đổi trận đã kết thúc, Tab và mũi tên vẫn xem được bàn. Bấm “Ván mới” phải trở về 32 quân khai cuộc, Đỏ đi trước, không hỏi xác nhận và focus về nút; fixture không tự nạp lại sau reset. Thử thêm ở chiều rộng 375px. Tải lại trang fixture để nạp lại thế kiểm tra.
 

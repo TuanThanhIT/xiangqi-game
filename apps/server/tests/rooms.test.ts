@@ -73,6 +73,24 @@ test("HTTP: health, create/join, validation, cạnh tranh, lỗi parse và lỗi
       const response = await fetch(base + "/health");
       assert.equal(response.status, 200); assert.deepEqual(await response.json(), { status: "ok" });
     });
+    await t.test("theme create mặc định/5 ID; URL/path/CSS và theme khi join bị từ chối", async () => {
+      const old = await (await post("/rooms", { nickname: "Legacy" })).json() as SeatResponse;
+      assert.equal(service.publicState(old.roomCode).themeId, "earth");
+      for (const themeId of ["earth", "meadow", "ink", "bamboo", "snow"] as const) {
+        const response = await post("/rooms", { nickname: "  R  ", themeId });
+        assert.equal(response.status, 201);
+        const red = await response.json() as SeatResponse;
+        assert.equal(service.publicState(red.roomCode).themeId, themeId);
+        await expectError(await post(`/rooms/${red.roomCode}/join`, { nickname: "B", themeId: "earth" }), 400, "INVALID_REQUEST");
+        const joined = await post(`/rooms/${red.roomCode}/join`, { nickname: "B" });
+        assert.equal(joined.status, 200);
+        assert.equal(service.publicState(red.roomCode).themeId, themeId);
+        assert.equal(service.publicGameState(red.roomCode).game!.revision, 0);
+      }
+      for (const themeId of [null, 1, {}, [], "", "EARTH", "water", "https://example.com/a.png", "../snow", "url(x)", "earth; color:red"]) {
+        await expectError(await post("/rooms", { nickname: "A", themeId }), 400, "INVALID_REQUEST");
+      }
+    });
     await t.test("create trim, join, status và no-store, token không lộ đối phương", async () => {
       const response = await post("/rooms", { nickname: "  Người tạo  " });
       assert.equal(response.status, 201); assert.equal(response.headers.get("cache-control"), "no-store");

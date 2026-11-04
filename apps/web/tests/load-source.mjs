@@ -13,6 +13,8 @@ export function loader(mocks = {}) {
     const native = createRequire(filename);
     function requireSource(name) {
       if (Object.hasOwn(mocks, name)) return mocks[name];
+      // CSS Module chỉ cung cấp tên lớp trong test Node; layout được thử riêng trên browser.
+      if (name.endsWith(".module.css")) return new Proxy({}, { get: (_, key) => key === "__esModule" ? false : String(key) });
       if (name.startsWith(".") || name.startsWith("@/")) {
         const base = name.startsWith("@/") ? path.resolve("apps/web/src", name.slice(2)) : path.resolve(path.dirname(filename), name);
         for (const candidate of [base, base + ".ts", base + ".tsx"]) {

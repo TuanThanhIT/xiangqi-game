@@ -1,3 +1,8 @@
+@import "../styles/ui.css";
+@import "../styles/themes.css";
+@import "../styles/match.css";
+@import "../styles/captured.css";
+
 * {
   box-sizing: border-box;
 }
@@ -28,11 +33,11 @@ h1 {
   height: auto;
 }
 .board-surface {
-  fill: #efdab1;
+  fill: var(--xq-board);
 }
 .board-lines {
   fill: none;
-  stroke: #80623d;
+  stroke: var(--xq-board-line);
   stroke-width: 1.5;
 }
 .river-label {
@@ -41,7 +46,7 @@ h1 {
   letter-spacing: 6px;
 }
 .piece {
-  color: #262626;
+  color: var(--xq-side-black);
   pointer-events: none;
 }
 .board-intersection {
@@ -55,11 +60,11 @@ h1 {
   pointer-events: all;
 }
 .board-intersection:focus-visible .intersection-hit-area {
-  stroke: #245b91;
+  stroke: var(--xq-board-focus);
 }
 .piece-selection {
   fill: none;
-  stroke: #29251f;
+  stroke: var(--xq-board-ink);
   stroke-width: 2.5;
   stroke-dasharray: 7 3;
   pointer-events: none;
@@ -98,7 +103,7 @@ h1 {
 }
 .last-move {
   fill: none;
-  stroke: #245b91;
+  stroke: var(--xq-board-last-move);
   stroke-width: 3;
   pointer-events: none;
 }
@@ -107,6 +112,9 @@ h1 {
 }
 .last-move-to {
   stroke-dasharray: 4 3;
+  transform-box: fill-box;
+  transform-origin: center;
+  transform: scale(.86);
 }
 .board-help {
   margin: 0.75rem 0;
@@ -115,15 +123,12 @@ h1 {
   line-height: 1.5;
 }
 .piece-body {
-  fill: #fff8e9;
+  fill: var(--xq-piece);
   stroke: currentColor;
   stroke-width: 2;
 }
-.piece--black .piece-body {
-  stroke-dasharray: 5 3;
-}
 .piece--red {
-  color: #a52121;
+  color: var(--xq-side-red);
 }
 .piece-inner-ring {
   fill: none;
@@ -132,6 +137,7 @@ h1 {
 }
 .piece text {
   fill: currentColor;
-  font-size: 13px;
-  font-weight: 700;
+  font-family: "KaiTi", "STKaiti", "Noto Serif CJK TC", "Noto Serif CJK SC", "Microsoft JhengHei", "Microsoft YaHei", "PingFang TC", "SimSun", serif;
+  font-size: 30px;
+  font-weight: 600;
 }

@@ -1,5 +1,7 @@
 import PlayRoom from "@/features/rooms/PlayRoom";
 
-export default function PlayPage() {
-  return <main><h1>Tạo / vào phòng cờ tướng</h1><PlayRoom /></main>;
+export default async function PlayPage({ searchParams }: { searchParams: Promise<{ mode?: string | string[] }> }) {
+  const { mode } = await searchParams;
+  const initialMode = mode === "create" || mode === "join" ? mode : "both";
+  return <PlayRoom key={initialMode} initialMode={initialMode} />;
 }

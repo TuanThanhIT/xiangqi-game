@@ -1,0 +1,126 @@
+{
+  "generator": "image_gen",
+  "source": "Created for Xiangqi Game; not extracted from concept screenshots",
+  "assets": [
+    {
+      "theme": "earth",
+      "file": "earth/page-bg.webp",
+      "bytes": 120618,
+      "width": 1672,
+      "height": 941,
+      "original": "exec-6208ce67-bfac-43bd-a514-8de7433d38d3.png"
+    },
+    {
+      "theme": "earth",
+      "file": "earth/ground.webp",
+      "bytes": 5748,
+      "width": 512,
+      "height": 512,
+      "original": "exec-c5f39743-da4d-46c9-a8d0-0283ad265175.png"
+    },
+    {
+      "theme": "earth",
+      "file": "earth/preview.webp",
+      "bytes": 4872,
+      "width": 320,
+      "height": 180,
+      "original": "exec-6208ce67-bfac-43bd-a514-8de7433d38d3.png"
+    },
+    {
+      "theme": "meadow",
+      "file": "meadow/page-bg.webp",
+      "bytes": 121454,
+      "width": 1672,
+      "height": 941,
+      "original": "exec-db03b7f8-bb9e-4b5c-b2a9-82dae0f0f6b8.png"
+    },
+    {
+      "theme": "meadow",
+      "file": "meadow/ground.webp",
+      "bytes": 7900,
+      "width": 512,
+      "height": 512,
+      "original": "exec-194571f3-84da-4a38-bb48-213c72b4ff19.png"
+    },
+    {
+      "theme": "meadow",
+      "file": "meadow/preview.webp",
+      "bytes": 5924,
+      "width": 320,
+      "height": 180,
+      "original": "exec-db03b7f8-bb9e-4b5c-b2a9-82dae0f0f6b8.png"
+    },
+    {
+      "theme": "ink",
+      "file": "ink/page-bg.webp",
+      "bytes": 89336,
+      "width": 1672,
+      "height": 941,
+      "original": "exec-3e523552-bccb-4c5b-9093-7578be1d9700.png"
+    },
+    {
+      "theme": "ink",
+      "file": "ink/ground.webp",
+      "bytes": 2478,
+      "width": 512,
+      "height": 512,
+      "original": "exec-ab386fea-241c-44a5-9a4c-c3706a00c0f7.png"
+    },
+    {
+      "theme": "ink",
+      "file": "ink/preview.webp",
+      "bytes": 5180,
+      "width": 320,
+      "height": 180,
+      "original": "exec-3e523552-bccb-4c5b-9093-7578be1d9700.png"
+    },
+    {
+      "theme": "bamboo",
+      "file": "bamboo/page-bg.webp",
+      "bytes": 60580,
+      "width": 1672,
+      "height": 941,
+      "original": "exec-cc63dff2-d013-49b0-a48c-3e737dee3b0b.png"
+    },
+    {
+      "theme": "bamboo",
+      "file": "bamboo/ground.webp",
+      "bytes": 3170,
+      "width": 512,
+      "height": 512,
+      "original": "exec-ddf15acb-5a6f-4c48-950b-d51a0c70c35c.png"
+    },
+    {
+      "theme": "bamboo",
+      "file": "bamboo/preview.webp",
+      "bytes": 4314,
+      "width": 320,
+      "height": 180,
+      "original": "exec-cc63dff2-d013-49b0-a48c-3e737dee3b0b.png"
+    },
+    {
+      "theme": "snow",
+      "file": "snow/page-bg.webp",
+      "bytes": 75936,
+      "width": 1672,
+      "height": 941,
+      "original": "exec-91e61819-9832-458b-82ef-4579caa6c79f.png"
+    },
+    {
+      "theme": "snow",
+      "file": "snow/ground.webp",
+      "bytes": 2830,
+      "width": 512,
+      "height": 512,
+      "original": "exec-34570666-59cd-49f1-b773-6ba5784563ab.png"
+    },
+    {
+      "theme": "snow",
+      "file": "snow/preview.webp",
+      "bytes": 4674,
+      "width": 320,
+      "height": 180,
+      "original": "exec-91e61819-9832-458b-82ef-4579caa6c79f.png"
+    }
+  ]
+}

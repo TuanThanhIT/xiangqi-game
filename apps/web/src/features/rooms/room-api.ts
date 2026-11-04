@@ -1,11 +1,12 @@
 import { errorMessages, isBackendError, isSession, record } from "./room-contract";
 import type { RoomSession } from "./room-contract";
+import type { RoomThemeId } from "./room-theme";
 
-export async function requestRoom(nickname: string, code: string | undefined, signal: AbortSignal): Promise<RoomSession> {
+export async function requestRoom(nickname: string, code: string | undefined, signal: AbortSignal, themeId: RoomThemeId = "earth"): Promise<RoomSession> {
   let response: Response;
   try {
     response = await fetch(code === undefined ? "/api/rooms" : `/api/rooms/${encodeURIComponent(code)}/join`, {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ nickname }),
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ nickname, ...(code === undefined ? { themeId } : {}) }),
       cache: "no-store", signal,
     });
   } catch {

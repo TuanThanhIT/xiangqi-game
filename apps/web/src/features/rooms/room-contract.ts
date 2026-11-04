@@ -1,12 +1,15 @@
+import { isRoomThemeId } from "./room-theme";
+import type { RoomThemeId } from "./room-theme";
+
 export type Seat = "red" | "black";
 export interface RoomSession { roomCode: string; seatToken: string; seat: Seat; nickname: string }
 export interface StoredSession extends RoomSession { version: 1 }
 export interface PublicPlayer { nickname: string; side: Seat; connected: boolean }
-export interface RoomSnapshot { roomCode: string; players: { red: PublicPlayer; black: PublicPlayer | null } }
+export interface RoomSnapshot { roomCode: string; themeId: RoomThemeId; players: { red: PublicPlayer; black: PublicPlayer | null } }
 export interface RoomIdentity { roomCode: string; seat: Seat }
 
 export const errorMessages = {
-  INVALID_REQUEST: "Biệt danh phải dài 1–30 ký tự và body phải đúng định dạng.",
+  INVALID_REQUEST: "Kiểm tra biệt danh (1–30 ký tự), phong cách và định dạng yêu cầu.",
   INVALID_ROOM_CODE: "Mã phòng không hợp lệ.",
   INVALID_JSON: "Dữ liệu JSON không hợp lệ.",
   ROOM_NOT_FOUND: "Phòng không tồn tại.",
@@ -47,7 +50,7 @@ function isPlayer(value: unknown, side: Seat): value is PublicPlayer {
     isNickname(value.nickname) && value.side === side && typeof value.connected === "boolean";
 }
 export function isSnapshot(value: unknown): value is RoomSnapshot {
-  return record(value) && keys(value, ["roomCode", "players"]) && isCode(value.roomCode) &&
+  return record(value) && keys(value, ["roomCode", "themeId", "players"]) && isCode(value.roomCode) && isRoomThemeId(value.themeId) &&
     record(value.players) && keys(value.players, ["red", "black"]) && isPlayer(value.players.red, "red") &&
     (value.players.black === null || isPlayer(value.players.black, "black"));
 }

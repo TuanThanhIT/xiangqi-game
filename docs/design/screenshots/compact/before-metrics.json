@@ -1,0 +1,62 @@
+[
+  {
+    "theme": "earth",
+    "phase": "before",
+    "width": 1366,
+    "height": 768,
+    "board": {
+      "x": 543.5,
+      "y": 242.796875,
+      "width": 608,
+      "height": 674.078125,
+      "bottom": 916.875
+    },
+    "scrollX": false,
+    "scrollY": true
+  },
+  {
+    "theme": "earth",
+    "phase": "before",
+    "width": 1920,
+    "height": 1080,
+    "board": {
+      "x": 820.5,
+      "y": 242.796875,
+      "width": 608,
+      "height": 674.078125,
+      "bottom": 916.875
+    },
+    "scrollX": false,
+    "scrollY": true
+  },
+  {
+    "theme": "earth",
+    "phase": "before",
+    "width": 375,
+    "height": 667,
+    "board": {
+      "x": 16,
+      "y": 815.5,
+      "width": 328,
+      "height": 363.640625,
+      "bottom": 1179.140625
+    },
+    "scrollX": false,
+    "scrollY": true
+  },
+  {
+    "theme": "earth",
+    "phase": "before",
+    "width": 390,
+    "height": 844,
+    "board": {
+      "x": 16,
+      "y": 723.90625,
+      "width": 343,
+      "height": 380.28125,
+      "bottom": 1104.1875
+    },
+    "scrollX": false,
+    "scrollY": true
+  }
+]

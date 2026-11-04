@@ -5,10 +5,10 @@ import { createInitialPieces, getGameStatus } from "@xiangqi/rules";
 import { loader } from "./load-source.mjs";
 
 const load = loader();
-const { isGameSnapshot, isMoveAck, sameGame } = load("apps/web/src/features/rooms/game-contract.ts");
+const { isGameSnapshot, isMoveAck, isResignAck, sameGame } = load("apps/web/src/features/rooms/game-contract.ts");
 const { OnlineGameSession } = load("apps/web/src/features/rooms/online-game-session.ts");
 function initial() {
-  return { roomCode: "ABC234", playEnabled: true, game: { pieces: createInitialPieces(), sideToMove: "red", lastMove: null,
+  return { roomCode: "ABC234", serverNow: 1000, deadlines: { red: null, black: null }, playEnabled: true, game: { pieces: createInitialPieces(), sideToMove: "red", lastMove: null,
     revision: 0, result: { status: "playing", sideToMove: "red", inCheck: false } } };
 }
 function moved() {
@@ -20,7 +20,7 @@ function harness(sync = true) {
   let state, connected = true, now = 0, protocol = 0;
   const tasks = new Set(), allTasks = [], sends = [];
   const session = new OnlineGameSession("ABC234", "red", {
-    connected: () => connected, send: (request, callback) => sends.push({ request, callback }), uuid: randomUUID,
+    connected: () => connected, send: (request, callback, kind) => sends.push({ request, callback, kind }), uuid: randomUUID,
     change: (next) => { state = next; }, protocolError: () => protocol++,
     schedule: (callback, delay) => { const task = { callback, at: now + delay }; tasks.add(task); allTasks.push(task); return () => tasks.delete(task); },
   });
@@ -42,7 +42,7 @@ function harness(sync = true) {
 
 test("Validator: hình dạng/kiểu/quân/Tướng/revision/result/lastMove và ack", () => {
   assert.equal(isGameSnapshot(initial()), true); assert.equal(isGameSnapshot(moved()), true);
-  assert.equal(isGameSnapshot({ roomCode: "ABC234", game: null, playEnabled: false }), true);
+  assert.equal(isGameSnapshot({ roomCode: "ABC234", serverNow: 1000, deadlines: { red: null, black: null }, game: null, playEnabled: false }), true);
   for (const mutate of [
     (s) => { s.secret = "x"; }, (s) => { s.game.revision = 0.5; }, (s) => { s.game.pieces[0].position.row = 10; },
     (s) => { s.game.pieces[0].position.col = 0.5; }, (s) => { s.game.pieces[0].type = "queen"; },
@@ -57,7 +57,7 @@ test("Validator: hình dạng/kiểu/quân/Tướng/revision/result/lastMove và
   assert.equal(isMoveAck({ ok: false, requestId: null, code: "SOCKET_NOT_ACTIVE", message: "x" }), true);
   for (const reason of ["checkmate", "stalemate"]) {
     const fixture = load("apps/web/src/dev/endgame-fixtures.ts").createEndgameFixture(reason);
-    assert.equal(isGameSnapshot({ roomCode: "ABC234", playEnabled: false, game: { pieces: fixture.pieces,
+    assert.equal(isGameSnapshot({ roomCode: "ABC234", serverNow: 1000, deadlines: { red: null, black: null }, playEnabled: false, game: { pieces: fixture.pieces,
       sideToMove: fixture.sideToMove, revision: 0, lastMove: null, result: getGameStatus(fixture.pieces, fixture.sideToMove) } }), true);
   }
 });
@@ -129,4 +129,61 @@ test("Ack sai hợp đồng/ID bị khóa; thiếu snapshot ban đầu có phụ
   const q = harness(false); q.tick(); assert.equal(q.state.recovery, true); assert.equal(q.start(), false);
   const r = harness(); r.start(); r.disconnect(); r.session.reconnectFailed();
   assert.ok(r.state.pending.unknown); assert.equal(r.state.recovery, true);
+});
+
+function resigned() {
+  const s = initial(); s.playEnabled = false; s.game.revision = 1;
+  s.game.result = { status: "finished", winner: "red", loser: "black", reason: "resignation" }; return s;
+}
+
+test("Resign validator: trước nước đầu/ngoài lượt, winner-loser khác, chỉ finished/playEnabled false", () => {
+  assert.equal(isGameSnapshot(resigned()), true); // Đỏ tới lượt nhưng Đen thua.
+  for (const change of [(s) => { s.playEnabled = true; }, (s) => { s.game.result.loser = "red"; },
+    (s) => { s.game.result.loser = "other"; }, (s) => { s.game.revision = 0; }]) {
+    const s = resigned(); change(s); assert.equal(isGameSnapshot(s), false);
+  }
+  const inconsistent = resigned(); inconsistent.game.result.reason = "checkmate";
+  assert.equal(isGameSnapshot(inconsistent), false);
+  const id = randomUUID();
+  assert.equal(isResignAck({ ok: false, requestId: id, code: "INVALID_RESIGN_REQUEST", message: "x" }), true);
+  assert.equal(isMoveAck({ ok: false, requestId: id, code: "INVALID_RESIGN_REQUEST", message: "x" }), false);
+  assert.equal(isResignAck({ ok: false, requestId: id, code: "NOT_YOUR_TURN", message: "x" }), false);
+});
+
+test("Resign: ngoài lượt/đối thủ offline được gửi, bản thân offline/chưa sync không được; chung khóa với move", () => {
+  const h = harness(); h.session.receiveSnapshot({ ...moved(), playEnabled: false });
+  assert.equal(h.session.canInteract(), false); assert.equal(h.session.canResign(), true);
+  assert.equal(h.session.sendResign(), true); assert.equal(h.start(), false); assert.equal(h.session.sendResign(), false);
+  assert.equal(h.sends[0].kind, "resign"); assert.deepEqual(Object.keys(h.sends[0].request), ["requestId"]);
+  h.disconnect(); assert.equal(h.session.canResign(), false); assert.equal(h.session.sendResign(), false);
+  h.session.dispose();
+  const m = harness(); m.start(); assert.equal(m.session.sendResign(), false); m.session.dispose();
+  const q = harness(false); assert.equal(q.session.sendResign(), false); q.session.dispose();
+});
+
+test("Resign: ack trước/sau snapshot; delta revision không bị ép bằng 1; kết thúc khóa mọi hành động", () => {
+  for (const ackFirst of [true, false]) {
+    const h = harness(); h.session.sendResign();
+    const snapshot = moved(); snapshot.game.revision = 2; snapshot.playEnabled = false;
+    snapshot.game.result = { status: "finished", winner: "black", loser: "red", reason: "resignation" };
+    const ack = () => h.sends[0].callback({ ok: true, requestId: h.sends[0].request.requestId, appliedRevision: 2 });
+    if (ackFirst) { ack(); assert.equal(h.state.snapshot.game.revision, 0); assert.ok(h.state.pending); h.session.receiveSnapshot(snapshot); }
+    else { h.session.receiveSnapshot(snapshot); assert.ok(h.state.pending); ack(); }
+    assert.equal(h.state.pending, null); assert.equal(h.protocol, 0); assert.equal(h.session.canResign(), false);
+    assert.equal(h.start(), false); assert.equal(h.session.sendResign(), false);
+    const bad = structuredClone(snapshot); bad.game.result.winner = "red"; bad.game.result.loser = "black";
+    h.session.receiveSnapshot(bad); assert.equal(h.protocol, 1); // Cùng revision vẫn kiểm tra kết quả.
+  }
+});
+
+test("Resign: retry/timeout, reconnect và callback cũ giữ đúng loại và payload, không mở khóa bằng snapshot", () => {
+  const h = harness(); h.session.sendResign(); const req = structuredClone(h.sends[0].request);
+  h.disconnect(); h.tick(20000); assert.equal(h.sends.length, 1);
+  h.reconnect(); assert.equal(h.sends.length, 1); h.session.receiveSnapshot(resigned()); assert.equal(h.sends.length, 2);
+  h.success(0); assert.equal(h.state.pending.ack, null);
+  h.tick(10000); assert.equal(h.sends.length, 3);
+  assert.equal(h.state.message, "Chưa xác định được kết quả đầu hàng");
+  for (const send of h.sends) { assert.equal(send.kind, "resign"); assert.deepEqual(send.request, req); }
+  h.session.receiveSnapshot(resigned()); h.success(); assert.ok(h.state.pending.unknown); assert.equal(h.state.recovery, true);
+  const before = structuredClone(h.state); h.session.dispose(); h.allTasks.forEach((t) => t.callback()); assert.deepEqual(h.state, before);
 });

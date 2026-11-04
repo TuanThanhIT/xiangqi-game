@@ -1,0 +1,30 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import React from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { createInitialPieces } from "@xiangqi/rules";
+import { loader } from "./load-source.mjs";
+
+test("Nhiều bàn có ID SVG riêng; selected đổi thứ tự vẽ nhưng không đổi dữ liệu hoặc hit area", () => {
+  const Board = loader()("apps/web/src/components/BoardView.tsx").default;
+  const pieces = createInitialPieces(), before = structuredClone(pieces);
+  const props = { pieces, selectedPieceId: pieces[0].id, lastMove: { from: {row: 0,col: 0}, to: {row: 1,col: 0} }, disabled: false, onActivate() {}, onClearSelection() {} };
+  const html = renderToStaticMarkup(React.createElement("div", null, React.createElement(Board, props), React.createElement(Board, props)));
+  const ids = [...html.matchAll(/\sid="([^"]+)"/g)].map(m=>m[1]);
+  assert.equal(new Set(ids).size, ids.length);
+  for (const ref of html.matchAll(/url\(#([^\)]+)\)/g)) assert.ok(ids.includes(ref[1]));
+  assert.equal((html.match(/class="board-intersection"/g)||[]).length,180);
+  assert.equal((html.match(/x="-28" y="-28" width="56" height="56"/g)||[]).length,180);
+  assert.equal((html.match(/aria-pressed="true"/g)||[]).length,2);
+  assert.ok(!/<rect[^>]+class="(?:piece-selection|last-move-to)"/.test(html));
+  assert.equal((html.match(/class="piece-selection" r="26.5"/g)||[]).length,2);
+  const first = html.split('</svg>')[0];
+  const facePositions=[...first.matchAll(/class="piece piece--\w+" transform="translate\(([^)]+)\)"/g)].map(m=>m[1]);
+  assert.equal(facePositions.at(-1),'36 36');
+  assert.ok(first.includes('class="intersection-focus" r="33"'));
+  const clip=first.match(/<clipPath id="([^"]+-river-clip)"><rect x="36" y="276" width="480" height="60"><\/rect><\/clipPath>/);
+  assert.ok(clip, 'Sông phải có clip suy ra từ constants lưới');
+  assert.ok(first.includes(`clip-path="url(#${clip[1]})" class="board-river"`));
+  assert.match(first, /class="board-water" x="36" y="276" width="480" height="60"/);
+  assert.deepEqual(pieces,before);
+});

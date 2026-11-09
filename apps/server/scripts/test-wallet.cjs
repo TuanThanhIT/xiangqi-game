@@ -49,7 +49,7 @@ test("Wallet/bets: isolated PostgreSQL, real HTTP/Auth/Socket.IO",{timeout:90000
    return {id,email};
   }
   const old=await user(),oldPending=await user(false);
-  await migrate("0002_colorful_titanium_man.sql");
+  await migrate("0002_colorful_titanium_man.sql");await migrate("0003_thin_payback.sql");
   app=await NestFactory.create(AppModule,{logger:false,abortOnError:false,bodyParser:false});
   app.get(DatabaseService).db=db;
   const wallet=app.get(WalletService),betting=app.get(BettingService),rooms=app.get(RoomsService);

@@ -20,6 +20,7 @@ import { clockDeadline, isTotalMinutes, nextClockTurn, publicClock, startGameClo
 import { BettingService, InsufficientGold } from "../wallet/betting.service";
 import { validGold, WalletService } from "../wallet/wallet.service";
 import type { RoomBet } from "./rooms.types";
+import { LoadoutService } from "../items/loadout.service";
 
 // Token DI nội bộ, không lấy từ request hoặc biến môi trường.
 export const ROOM_CODE_GENERATOR = Symbol("ROOM_CODE_GENERATOR");
@@ -40,7 +41,8 @@ export class RoomsService implements OnModuleDestroy {
   constructor(@Inject(ROOM_CODE_GENERATOR) private readonly generateCode: () => string,
     @Optional() @Inject(ROOM_CLOCK) private readonly clock: RoomClock = systemRoomClock,
     @Optional() private readonly betting?:BettingService,
-    @Optional() private readonly wallet?:WalletService) {}
+    @Optional() private readonly wallet?:WalletService,
+    @Optional() private readonly loadouts?:LoadoutService) {}
 
   private online(player: Room["red"] | null): boolean { return !!(player?.activeSocketId && player.presence); }
   private clearTimer(room: Room): void { room.timerVersion++; room.cancelTimer?.(); room.cancelTimer = null; }
@@ -141,8 +143,9 @@ export class RoomsService implements OnModuleDestroy {
     if (!isTotalMinutes(totalMinutes)) throw new BadRequestException({code:"INVALID_TIME_CONTROL"});
     this.ensureFree(profile.id);
     const response = this.create(profile.nickname, themeId), room = this.rooms.get(response.roomCode)!;
-    Object.assign(room.red, {accountId:profile.id, avatar:profile.avatar.assetPath, ready:false, offlineDeadline:this.clock.now()+60000});
+    Object.assign(room.red, {accountId:profile.id, avatar:profile.avatar.assetPath, ready:false, loadout:[], offlineDeadline:this.clock.now()+60000});
     room.totalMinutes = totalMinutes;
+    room.itemsEnabled = false;
     this.scheduleRoom(room, this.clock.now());
     return {...response, casual:true};
   }
@@ -193,6 +196,32 @@ export class RoomsService implements OnModuleDestroy {
     if(room.red.ready||room.black?.ready)throw new ConflictException({code:"PLAYERS_READY"});
     room.stake=stake;this.notifyChange(code);
   }
+  setItemsEnabled(code:string,accountId:string,enabled:boolean):void {
+    let member=this.accountSeat(code,accountId);this.evaluateDeadlines(member.room,this.clock.now());member=this.accountSeat(code,accountId);
+    const {room,side}=member;this.assertNotStarting(room);
+    if(side!=="red")throw new ForbiddenException({code:"NOT_ROOM_OWNER"});
+    if(room.game)throw new ConflictException({code:"GAME_ALREADY_STARTED"});
+    if(room.red.ready||room.black?.ready)throw new ConflictException({code:"PLAYERS_READY"});
+    room.itemsEnabled=enabled;this.notifyChange(code);
+  }
+  async setLoadout(code:string,accountId:string,itemCodes:unknown):Promise<void> {
+    if(!this.loadouts)throw new ServiceUnavailableException();
+    const normalized=this.loadouts.normalize(itemCodes);
+    let member=this.accountSeat(code,accountId);this.evaluateDeadlines(member.room,this.clock.now());member=this.accountSeat(code,accountId);
+    const {room,side}=member;this.assertNotStarting(room);
+    if(room.game)throw new ConflictException({code:"GAME_ALREADY_STARTED"});
+    if(!room.itemsEnabled)throw new ConflictException({code:"ITEMS_DISABLED"});
+    await this.loadouts.validateOwnership(accountId,normalized);
+    if(this.rooms.get(code)!==room)throw new NotFoundException({code:"ROOM_NOT_FOUND"});
+    this.assertNotStarting(room);if(room.game)throw new ConflictException({code:"GAME_ALREADY_STARTED"});
+    if(!room.itemsEnabled)throw new ConflictException({code:"ITEMS_DISABLED"});
+    room[side]!.loadout=normalized;room[side]!.ready=false;this.notifyChange(code);
+  }
+  ownLoadout(code:string,accountId:string) {
+    const {room,side}=this.accountSeat(code,accountId);
+    return {roomCode:code,itemsEnabled:!!room.itemsEnabled,locked:!!room.game,
+      matchId:room.gameMatchId??null,itemCodes:[...(room[side]!.loadout??[])]};
+  }
   private assertNotStarting(room:Room):void {
     if(room.starting||room.cleanupPending)throw new ConflictException({code:"ROOM_STARTING"});
   }
@@ -202,22 +231,37 @@ export class RoomsService implements OnModuleDestroy {
     const now=this.clock.now();room.gameClock=startGameClock((room.totalMinutes??15)*60_000,now);
     this.scheduleRoom(room,now);
   }
-  private async startBetGame(room:Room,matchId:string):Promise<void> {
+  private async startPreparedGame(room:Room,matchId:string):Promise<void> {
     const red=room.red,black=room.black!;
     try{
-      if(!this.betting)throw new ServiceUnavailableException();
-      const bet=await this.betting.hold(matchId,room.code,red.accountId!,black.accountId!,room.stake!);
-      room.betStatus=bet.status as RoomBet["status"];
+      if(room.itemsEnabled){
+        if(!this.loadouts)throw new ServiceUnavailableException();
+        await this.loadouts.snapshot(matchId,[{accountId:red.accountId!,itemCodes:red.loadout??[]},{accountId:black.accountId!,itemCodes:black.loadout??[]}]);
+      }
+      let betStatus:RoomBet["status"]="none";
+      if(room.stake){
+        if(!this.betting)throw new ServiceUnavailableException();
+        const bet=await this.betting.hold(matchId,room.code,red.accountId!,black.accountId!,room.stake);
+        betStatus=bet.status as RoomBet["status"];
+      }
+      room.betStatus=betStatus;
       if(this.closed||this.rooms.get(room.code)!==room||room.red!==red||room.black!==black||
-         !red.ready||!black.ready||!red.attached||!black.attached||!this.online(red)||!this.online(black)||bet.status!=="held") {
+         !red.ready||!black.ready||!red.attached||!black.attached||!this.online(red)||!this.online(black)||(room.stake&&betStatus!=="held")) {
         throw new ConflictException({code:"ROOM_START_ABORTED"});
       }
+      room.gameMatchId=matchId;
       this.startGame(room);
     }catch(error){
+      if(room.itemsEnabled&&this.loadouts)try{await this.loadouts.discard(matchId);}catch{/* Orphan cleanup is retriable and must not expose DB details. */}
       if(error instanceof InsufficientGold){
         if(error.accountIds.includes(red.accountId!))red.ready=false;
         if(error.accountIds.includes(black.accountId!))black.ready=false;
-        room.matchId=undefined;room.betStatus="none";throw error;
+        room.matchId=undefined;room.gameMatchId=undefined;room.betStatus="none";throw error;
+      }
+      if(!room.stake){
+        red.ready=false;black.ready=false;room.gameMatchId=undefined;
+        if(error instanceof BadRequestException||error instanceof ConflictException)throw error;
+        throw new ServiceUnavailableException();
       }
       // The commit may have succeeded even if its acknowledgement was lost.
       // Keep this attempt locked until its durable hold has been found/refunded.
@@ -234,7 +278,7 @@ export class RoomsService implements OnModuleDestroy {
       if(bet.status==="held")await this.betting.recordResult(bet.matchId,{status:"cancelled",reason:"start_aborted"});
       await this.betting.settle(bet.matchId);
     }
-    room.cleanupPending=false;room.matchId=undefined;room.betStatus="none";this.retryRooms.delete(room);
+    room.cleanupPending=false;room.matchId=undefined;room.gameMatchId=undefined;room.betStatus="none";this.retryRooms.delete(room);
     this.notifyIfPresent(room);
   }
   private publicBet(room:Room):RoomBet {
@@ -290,10 +334,11 @@ export class RoomsService implements OnModuleDestroy {
     // No await: simultaneous requests cannot create two games or reset a started game.
     if (room.red.ready && room.black?.ready && room.red.attached && room.black.attached &&
         this.online(room.red) && this.online(room.black)) {
-      if(room.stake){
-        const matchId=room.matchId??randomUUID();room.matchId=matchId;
+      if(room.stake||room.itemsEnabled){
+        const matchId=room.gameMatchId??room.matchId??randomUUID();room.gameMatchId=matchId;
+        if(room.stake)room.matchId=matchId;
         // Install the in-flight promise before any asynchronous hold can finish.
-        const task=Promise.resolve().then(()=>this.startBetGame(room,matchId));room.starting=task;
+        const task=Promise.resolve().then(()=>this.startPreparedGame(room,matchId));room.starting=task;
         this.walletWork.add(task);
         void task.finally(()=>{this.walletWork.delete(task);if(room.starting===task)room.starting=undefined;this.notifyIfPresent(room);}).catch(()=>{});
         this.notifyChange(code);return task;
@@ -332,7 +377,7 @@ export class RoomsService implements OnModuleDestroy {
     do { token = randomBytes(32).toString("base64url"); } while (token === room.red.token);
     const game = profile ? null : createRoomGame();
     const black = { nickname, token, activeSocketId: null, attached: false, presence: false, requests: new Map(), offlineDeadline: null };
-    if (profile) Object.assign(black,{accountId:profile.id,avatar:profile.avatar.assetPath,ready:false,offlineDeadline:this.clock.now()+60000});
+    if (profile) Object.assign(black,{accountId:profile.id,avatar:profile.avatar.assetPath,ready:false,loadout:[],offlineDeadline:this.clock.now()+60000});
     const joined = { ...room, black, game };
     this.rooms.set(code, joined);
     this.refreshDeadlines(joined, this.clock.now());
@@ -396,7 +441,7 @@ export class RoomsService implements OnModuleDestroy {
       return player ? { nickname: player.nickname, side: seat, connected: this.online(player), ...(player.accountId ? {ready:!!player.ready,avatar:player.avatar??null} : {}) } : null;
     };
     return { roomCode: code, themeId: room.themeId,
-      ...(room.red.accountId ? {casual:true as const, timeControl:{totalMs:(room.totalMinutes ?? 15)*60_000, turnMs:TURN_MS},bet:this.publicBet(room)} : {}),
+      ...(room.red.accountId ? {casual:true as const, timeControl:{totalMs:(room.totalMinutes ?? 15)*60_000, turnMs:TURN_MS},bet:this.publicBet(room),itemsEnabled:!!room.itemsEnabled} : {}),
       players: { red: publicPlayer("red")!, black: publicPlayer("black") } };
   }
 

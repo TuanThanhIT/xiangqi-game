@@ -44,6 +44,20 @@ export class CasualReadyPipe implements PipeTransform<unknown,{ready:boolean}> {
   }
 }
 @Injectable()
+export class CasualItemsPipe implements PipeTransform<unknown,{enabled:boolean}> {
+  transform(value:unknown):{enabled:boolean} {
+    if(!exact(value,"enabled")||typeof value.enabled!=="boolean")throw new BadRequestException({code:"INVALID_REQUEST"});
+    return {enabled:value.enabled};
+  }
+}
+@Injectable()
+export class CasualLoadoutPipe implements PipeTransform<unknown,{itemCodes:unknown[]}> {
+  transform(value:unknown):{itemCodes:unknown[]} {
+    if(!exact(value,"itemCodes")||!Array.isArray(value.itemCodes))throw new BadRequestException({code:"INVALID_LOADOUT"});
+    return {itemCodes:value.itemCodes};
+  }
+}
+@Injectable()
 export class CasualEmptyPipe implements PipeTransform {
   transform(value:unknown):Record<string,never> {
     if(!exact(value))throw new BadRequestException({code:"INVALID_REQUEST"});

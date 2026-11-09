@@ -35,4 +35,14 @@ export class WalletService {
     await tx.insert(walletEntries).values({accountId:row.accountId,entryNo:version,operationKey:`${matchId}:${reason}`,
       reason,matchId,availableDelta,heldDelta,availableAfter:availableGold,heldAfter:heldGold});
   }
+  async purchase(tx:WalletTx,row:typeof wallets.$inferSelect,amount:number,purchaseId:string,requestId:string) {
+    const availableGold=row.availableGold-amount,heldGold=row.heldGold;
+    if(!validGold(amount)||!validGold(availableGold))throw new BadRequestException({code:"INSUFFICIENT_GOLD"});
+    const version=row.version+1;
+    await tx.update(wallets).set({availableGold,version}).where(eq(wallets.accountId,row.accountId));
+    await tx.insert(walletEntries).values({accountId:row.accountId,entryNo:version,
+      operationKey:`purchase:${requestId}`,reason:"item_purchase",purchaseId,
+      availableDelta:-amount,heldDelta:0,availableAfter:availableGold,heldAfter:heldGold});
+    return {availableGold,heldGold,version};
+  }
 }

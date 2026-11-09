@@ -1,11 +1,9 @@
-const { rmSync } = require("node:fs");
-const { resolve, dirname } = require("node:path");
+const { resolve } = require("node:path");
 const { spawnSync } = require("node:child_process");
 
 const root = resolve(__dirname, "..");
-const output = resolve(root, "dist");
-if (dirname(output) !== root) throw new Error("Output build nằm ngoài rules");
-rmSync(output, { recursive: true, force: true });
+// Giữ dist để web/server đang chạy không mất module trong lúc build lại.
+// TypeScript ghi đè các file output hiện có.
 const result = spawnSync(process.execPath,
   [require.resolve("typescript/bin/tsc"), "-p", "tsconfig.build.json"],
   { cwd: root, stdio: "inherit" });

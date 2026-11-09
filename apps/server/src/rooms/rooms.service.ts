@@ -1,4 +1,4 @@
-import { ConflictException, Inject, Injectable, NotFoundException, ServiceUnavailableException, Optional, OnModuleDestroy } from "@nestjs/common";
+import { ConflictException, ForbiddenException, Inject, Injectable, NotFoundException, ServiceUnavailableException, Optional, OnModuleDestroy } from "@nestjs/common";
 import { randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import { EventEmitter } from "node:events";
 import type { Room, SeatResponse, SeatIdentity, PublicRoomState, PublicPlayer } from "./rooms.types";
@@ -15,6 +15,7 @@ import type { RoomClock } from "./room-clock";
 import type { Side } from "@xiangqi/rules";
 import type { OnlineGameResult } from "./room-game";
 import type { RoomThemeId } from "./room-theme";
+import type { AuthProfile } from "../auth/session/session.service";
 
 // Token DI nội bộ, không lấy từ request hoặc biến môi trường.
 export const ROOM_CODE_GENERATOR = Symbol("ROOM_CODE_GENERATOR");
@@ -36,7 +37,7 @@ export class RoomsService implements OnModuleDestroy {
   private clearTimer(room: Room): void { room.timerVersion++; room.cancelTimer?.(); room.cancelTimer = null; }
   private scheduleRoom(room: Room, now: number): void {
     this.clearTimer(room);
-    if (this.closed || room.game?.result.status !== "playing") return;
+    if (this.closed || (room.game?.result.status !== "playing" && !(room.red.accountId && !room.game))) return;
     // Chỉ đặt lịch cho deadline tương lai; không lặp lại timer của người đã quá hạn.
     const future = [room.red.offlineDeadline, room.black?.offlineDeadline].filter((d): d is number => typeof d === "number" && d > now);
     if (!future.length) return;
@@ -45,10 +46,20 @@ export class RoomsService implements OnModuleDestroy {
       if (this.closed || this.rooms.get(room.code) !== room || version !== room.timerVersion) return;
       room.cancelTimer = null;
       this.evaluateDeadlines(room, this.clock.now());
-      this.notifyChange(room.code);
+      if (this.rooms.has(room.code)) this.notifyChange(room.code);
     }, Math.min(...future) - now);
   }
   private evaluateDeadlines(room: Room, now: number): boolean {
+    if (room.red.accountId && !room.game) {
+      for (const side of ["red", "black"] as const) {
+        const player = room[side];
+        if (player?.offlineDeadline != null && now >= player.offlineDeadline) {
+          this.removeWaitingSeat(room, side, "timeout");
+          if (side === "red") return true;
+        }
+      }
+      this.scheduleRoom(room, now); return false;
+    }
     if (!room.game || room.game.result.status !== "playing") { this.clearTimer(room); return false; }
     const expired = (side: Side) => room[side]?.offlineDeadline !== null &&
       typeof room[side]?.offlineDeadline === "number" && now >= room[side]!.offlineDeadline!;
@@ -83,23 +94,88 @@ export class RoomsService implements OnModuleDestroy {
     throw new ServiceUnavailableException({ code: "ROOM_CODE_UNAVAILABLE" });
   }
 
+  private ensureFree(accountId: string): void {
+    for (const room of this.rooms.values()) {
+      if (room.red.accountId && !room.game) this.evaluateDeadlines(room, this.clock.now());
+      if (!this.rooms.has(room.code) || (room.game && room.game.result.status !== "playing")) continue;
+      if (room.red.accountId === accountId || room.black?.accountId === accountId) throw new ConflictException({code:"ACCOUNT_IN_ROOM"});
+    }
+  }
+  createCasual(profile: AuthProfile, themeId: RoomThemeId): SeatResponse {
+    this.ensureFree(profile.id);
+    const response = this.create(profile.nickname, themeId), room = this.rooms.get(response.roomCode)!;
+    Object.assign(room.red, {accountId:profile.id, avatar:profile.avatar.assetPath, ready:false, offlineDeadline:this.clock.now()+60000});
+    this.scheduleRoom(room, this.clock.now());
+    return {...response, casual:true};
+  }
+  joinCasual(code: string, profile: AuthProfile): SeatResponse {
+    this.ensureFree(profile.id);
+    const room = this.rooms.get(code);
+    if (!room?.red.accountId) throw new NotFoundException({code:"ROOM_NOT_FOUND"});
+    return this.join(code, profile.nickname, profile);
+  }
+  private accountSeat(code: string, accountId: string): {room:Room; side:"red"|"black"} {
+    const room = this.rooms.get(code);
+    if (!room) throw new NotFoundException({code:"ROOM_NOT_FOUND"});
+    if (room.red.accountId === accountId) return {room,side:"red"};
+    if (room.black?.accountId === accountId) return {room,side:"black"};
+    throw new ForbiddenException({code:"NOT_ROOM_MEMBER"});
+  }
+  setReady(code: string, accountId: string, ready: boolean): void {
+    let membership = this.accountSeat(code,accountId);
+    this.evaluateDeadlines(membership.room,this.clock.now());
+    membership = this.accountSeat(code,accountId);
+    const {room,side} = membership;
+    if (room.game) throw new ConflictException({code:"GAME_ALREADY_STARTED"});
+    if (!this.online(room[side]) || !room[side]!.attached) throw new ConflictException({code:"ROOM_OFFLINE"});
+    room[side]!.ready = ready;
+    // No await: simultaneous requests cannot create two games or reset a started game.
+    if (room.red.ready && room.black?.ready && this.online(room.red) && this.online(room.black)) {
+      room.game = createRoomGame(); this.clearTimer(room);
+      room.red.offlineDeadline = null; room.black.offlineDeadline = null;
+    }
+    this.notifyChange(code);
+  }
+  leaveCasual(code: string, accountId: string): void {
+    const {room,side} = this.accountSeat(code,accountId);
+    if (room.game) throw new ConflictException({code:"GAME_ALREADY_STARTED"});
+    this.removeWaitingSeat(room,side,"left");
+  }
+  private removeWaitingSeat(room:Room, side:"red"|"black", reason:"left"|"timeout"): void {
+    const socketId = room[side]?.activeSocketId;
+    if (side === "red") { this.clearTimer(room); this.rooms.delete(room.code); }
+    else { room.black = null; room.red.ready = false; this.scheduleRoom(room,this.clock.now()); }
+    for(const listener of this.changes.listeners("departure")) {
+      try {listener({roomCode:room.code, side, socketId, reason});}catch{/* A notification failure must not undo the departure. */}
+    }
+    if (side === "black") this.notifyChange(room.code);
+  }
+  onDeparture(listener:(event:{roomCode:string;side:"red"|"black";socketId:string|null|undefined;reason:"left"|"timeout"})=>void):()=>void {
+    this.changes.on("departure",listener); return ()=>{this.changes.off("departure",listener);};
+  }
+  accountForSeat(identity:SeatIdentity):string|undefined { return this.rooms.get(identity.roomCode)?.[identity.seat]?.accountId; }
+
   // Không await giữa kiểm tra và ghi ghế: nguyên tử trong một process Node.
-  join(code: string, nickname: string): SeatResponse {
+  join(code: string, nickname: string, profile?: AuthProfile): SeatResponse {
     const room = this.rooms.get(code);
     if (!room) throw new NotFoundException({ code: "ROOM_NOT_FOUND" });
+    if (room.red.accountId && !profile) throw new ForbiddenException({code:"NOT_ROOM_MEMBER"});
     if (room.black) throw new ConflictException({ code: "ROOM_FULL" });
     let token: string;
     do { token = randomBytes(32).toString("base64url"); } while (token === room.red.token);
-    const game = createRoomGame();
+    const game = profile ? null : createRoomGame();
     const black = { nickname, token, activeSocketId: null, attached: false, presence: false, requests: new Map(), offlineDeadline: null };
+    if (profile) Object.assign(black,{accountId:profile.id,avatar:profile.avatar.assetPath,ready:false,offlineDeadline:this.clock.now()+60000});
     const joined = { ...room, black, game };
     this.rooms.set(code, joined);
     this.refreshDeadlines(joined, this.clock.now());
     this.notifyChange(code);
-    return { roomCode: code, seat: "black", nickname: black.nickname, seatToken: black.token };
+    return { roomCode: code, seat: "black", nickname: black.nickname, seatToken: black.token, ...(profile ? {casual:true as const} : {}) };
   }
 
   authenticate(roomCode: string, token: string): SeatIdentity | null {
+    const waiting = this.rooms.get(roomCode);
+    if (waiting?.red.accountId && !waiting.game) this.evaluateDeadlines(waiting,this.clock.now());
     const room = this.rooms.get(roomCode);
     if (!room) return null;
     for (const seat of ["red", "black"] as const) {
@@ -132,9 +208,14 @@ export class RoomsService implements OnModuleDestroy {
     const room = this.rooms.get(identity.roomCode)!;
     const now = this.clock.now();
     this.evaluateDeadlines(room, now);
+    if (!this.ownsSocket(identity,socketId)) return false;
     this.rooms.get(identity.roomCode)![identity.seat]!.activeSocketId = null;
     this.rooms.get(identity.roomCode)![identity.seat]!.attached = false;
     this.rooms.get(identity.roomCode)![identity.seat]!.presence = false;
+    if (room.red.accountId && !room.game) {
+      room[identity.seat]!.ready = false;
+      room[identity.seat]!.offlineDeadline = now+60000;
+    }
     this.refreshDeadlines(room, now);
     this.notifyChange(identity.roomCode);
     return true;
@@ -145,9 +226,9 @@ export class RoomsService implements OnModuleDestroy {
     if (!room) throw new Error("Phòng không còn tồn tại");
     const publicPlayer = (seat: "red" | "black"): PublicPlayer | null => {
       const player = room[seat];
-      return player ? { nickname: player.nickname, side: seat, connected: this.online(player) } : null;
+      return player ? { nickname: player.nickname, side: seat, connected: this.online(player), ...(player.accountId ? {ready:!!player.ready,avatar:player.avatar??null} : {}) } : null;
     };
-    return { roomCode: code, themeId: room.themeId, players: { red: publicPlayer("red")!, black: publicPlayer("black") } };
+    return { roomCode: code, themeId: room.themeId, ...(room.red.accountId ? {casual:true as const} : {}), players: { red: publicPlayer("red")!, black: publicPlayer("black") } };
   }
 
   onRoomChange(listener: (code: string) => void): () => void {
@@ -168,8 +249,10 @@ export class RoomsService implements OnModuleDestroy {
     const now = this.clock.now();
     // Đánh giá trạng thái cũ, cả dấu quá hạn, trước khi kết nối có thể thay đổi kết quả.
     const ended = this.evaluateDeadlines(room, now);
+    if (!this.ownsSocket(identity,socketId)) return false;
     this.rooms.get(identity.roomCode)![identity.seat]!.attached = true;
     this.rooms.get(identity.roomCode)![identity.seat]!.presence = true;
+    if (room.red.accountId && !room.game) { room[identity.seat]!.offlineDeadline = null; room[identity.seat]!.ready = false; }
     this.refreshDeadlines(room, now);
     if (ended) this.notifyChange(room.code);
     return true;
@@ -179,7 +262,7 @@ export class RoomsService implements OnModuleDestroy {
     const room = this.rooms.get(code);
     if (!room) throw new Error("Phòng không còn tồn tại");
     const game = room.game;
-    return { roomCode: code, serverNow: this.clock.now(), deadlines: { red: room.red.offlineDeadline, black: room.black?.offlineDeadline ?? null },
+    return { roomCode: code, serverNow: this.clock.now(), deadlines: { red: game ? room.red.offlineDeadline : null, black: game ? room.black?.offlineDeadline ?? null : null },
       game: game ? structuredClone({ pieces: game.pieces, sideToMove: game.sideToMove,
       lastMove: game.lastMove, revision: game.revision, result: game.result }) : null,
       playEnabled: !!(game && game.result.status === "playing" && room.red.attached && room.red.activeSocketId &&

@@ -6,26 +6,40 @@ import { useRoomSession } from "./useRoomSession";
 import styles from "./play-room.module.css";
 import OnlineBoard from "./OnlineBoard";
 import OfflineDeadline from "./OfflineDeadline";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import WaitingRoom from "./WaitingRoom";
+import waiting from "./waiting-room.module.css";
+import portal from "@/components/main-menu.module.css";
+import entry from "../shared/entry-background.module.css";
+import Toast from "../shared/Toast";
 import { useRouter } from "next/navigation";
 import type { RoomFormMode } from "./RoomForm";
 import Notice from "./Notice";
 import { roomThemePageStyle } from "./room-theme";
 import MatchRoomCode from "./MatchRoomCode";
 
-export default function PlayRoom({ initialMode = "both" }: { initialMode?: RoomFormMode }) {
+export default function PlayRoom({ initialMode = "both", accountNickname }: { initialMode?: RoomFormMode; accountNickname?:string }) {
   const router = useRouter();
   const [mode, setMode] = useState<RoomFormMode>(initialMode);
-  const room = useRoomSession();
+  const room = useRoomSession(!!accountNickname);
+  useEffect(()=>{if(room.departed)router.replace(`/lobby?room=${room.departed}`);},[room.departed,router]);
   const themeId = room.session ? room.snapshot?.themeId : undefined;
   const hasGame = !!room.online.snapshot?.game;
   const lobby = room.session && <RoomLobby key={room.session.roomCode} roomCode={room.session.roomCode} identity={room.identity} snapshot={room.snapshot} phase={room.phase} hasGame={hasGame} />;
+  if (!hasGame && (accountNickname || room.session?.casual || room.savedSession?.casual)) return <main className={`${portal.portal} ${entry.scene} ${waiting.page}`}>
+    <header><h1>Xiangqi Game</h1>{!room.session&&<Link href="/lobby">Về sảnh</Link>}</header>
+    <div className={styles.play}>
+      {!room.ready?<p role="status">Đang khôi phục phiên phòng…</p>:room.session?<WaitingRoom code={room.session.roomCode} identity={room.identity} snapshot={room.snapshot} phase={room.phase} busy={room.waitingBusy} action={room.waitingAction}/>:room.savedSession?<section className={waiting.panel}><h2>Tiếp tục phòng</h2><p>Mã phòng: {room.savedSession.roomCode}</p><button className="xq-action xq-action--primary" onClick={room.continueRoom}>Tiếp tục phòng</button></section>:<RoomForm mode={mode} loading={room.loading} accountNickname={accountNickname} submit={room.submit} error={room.error}/>}
+    </div>
+    {(room.session||room.savedSession)&&<Toast message={room.error} onClose={room.clearError}/>}
+  </main>;
   return <main className={`xq-game-page${hasGame ? " xq-match-page" : ""}`} data-theme={themeId} style={roomThemePageStyle(themeId)}>
     <header className={hasGame ? "xq-room-sign" : undefined}><h1>{room.session ? "Xiangqi Game" : "Tạo / vào phòng cờ tướng"}</h1>{hasGame && room.session && <MatchRoomCode code={room.session.roomCode} />}</header>
     <div className={`${styles.play} ${styles.roomPage}`}>
     {!room.ready && <Notice>Đang kiểm tra phiên đã lưu…</Notice>}
     {!hasGame && room.warning && <Notice tone="warning">{room.warning}</Notice>}
-    {!hasGame && room.error && <Notice tone="error" id="room-error">{room.error}</Notice>}
+    {!hasGame && (room.session || room.savedSession) && room.error && <Notice tone="error" id="room-error">{room.error}</Notice>}
     {room.ready && (room.session
       ? <>
         {!hasGame && room.switchingRoom && <Notice>Đang xác thực và xử lý phiên cũ trước khi mở form tạo phòng mới…</Notice>}
@@ -68,6 +82,6 @@ export default function PlayRoom({ initialMode = "both" }: { initialMode?: RoomF
           <button type="button" className="xq-action xq-action--primary" onClick={room.continueRoom}>Tiếp tục phòng</button>
           <button type="button" className="xq-action xq-action--secondary" onClick={() => { setMode("create"); room.newRoom(); }}>Tạo phòng mới</button>
         </div>
-      </section> : <RoomForm mode={mode} loading={room.loading} submit={room.submit} errorId={room.error ? "room-error" : undefined} />)}
+      </section> : <RoomForm mode={mode} loading={room.loading} submit={room.submit} error={room.error} errorId={room.error ? "room-error" : undefined} />)}
   </div></main>;
 }

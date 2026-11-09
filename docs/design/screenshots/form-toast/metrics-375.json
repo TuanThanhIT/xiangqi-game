@@ -1,0 +1,227 @@
+[
+  {
+    "form": "register",
+    "clean": {
+      "card": {
+        "x": 17,
+        "y": 197,
+        "width": 341,
+        "height": 490.09375
+      },
+      "button": {
+        "x": 41,
+        "y": 571,
+        "width": 293,
+        "height": 54.5
+      },
+      "document": 812,
+      "viewport": 812,
+      "documentWidth": 375,
+      "scrollY": 0
+    },
+    "fields": {
+      "card": {
+        "x": 17,
+        "y": 197,
+        "width": 341,
+        "height": 568.09375
+      },
+      "button": {
+        "x": 41,
+        "y": 649,
+        "width": 293,
+        "height": 54.5
+      },
+      "document": 812,
+      "viewport": 812,
+      "documentWidth": 375,
+      "scrollY": 0
+    },
+    "baseline": {
+      "card": {
+        "x": 17,
+        "y": 197,
+        "width": 341,
+        "height": 490.09375
+      },
+      "button": {
+        "x": 41,
+        "y": 571,
+        "width": 293,
+        "height": 54.5
+      },
+      "document": 812,
+      "viewport": 812,
+      "documentWidth": 375,
+      "scrollY": 0
+    },
+    "withToast": {
+      "card": {
+        "x": 17,
+        "y": 197,
+        "width": 341,
+        "height": 490.09375
+      },
+      "button": {
+        "x": 41,
+        "y": 571,
+        "width": 293,
+        "height": 54.5
+      },
+      "document": 812,
+      "viewport": 812,
+      "documentWidth": 375,
+      "scrollY": 0
+    }
+  },
+  {
+    "form": "login",
+    "clean": {
+      "card": {
+        "x": 17,
+        "y": 197,
+        "width": 341,
+        "height": 395.09375
+      },
+      "button": {
+        "x": 41,
+        "y": 476,
+        "width": 293,
+        "height": 54.5
+      },
+      "document": 812,
+      "viewport": 812,
+      "documentWidth": 375,
+      "scrollY": 0
+    },
+    "fields": {
+      "card": {
+        "x": 17,
+        "y": 197,
+        "width": 341,
+        "height": 447.09375
+      },
+      "button": {
+        "x": 41,
+        "y": 528,
+        "width": 293,
+        "height": 54.5
+      },
+      "document": 812,
+      "viewport": 812,
+      "documentWidth": 375,
+      "scrollY": 0
+    },
+    "baseline": {
+      "card": {
+        "x": 17,
+        "y": 197,
+        "width": 341,
+        "height": 395.09375
+      },
+      "button": {
+        "x": 41,
+        "y": 476,
+        "width": 293,
+        "height": 54.5
+      },
+      "document": 812,
+      "viewport": 812,
+      "documentWidth": 375,
+      "scrollY": 0
+    },
+    "withToast": {
+      "card": {
+        "x": 17,
+        "y": 197,
+        "width": 341,
+        "height": 395.09375
+      },
+      "button": {
+        "x": 41,
+        "y": 476,
+        "width": 293,
+        "height": 54.5
+      },
+      "document": 812,
+      "viewport": 812,
+      "documentWidth": 375,
+      "scrollY": 0
+    }
+  },
+  {
+    "form": "otp",
+    "clean": {
+      "card": {
+        "x": 17,
+        "y": 197,
+        "width": 341,
+        "height": 441.875
+      },
+      "button": {
+        "x": 41,
+        "y": 462.78125,
+        "width": 293,
+        "height": 54.5
+      },
+      "document": 812,
+      "viewport": 812,
+      "documentWidth": 375,
+      "scrollY": 0
+    },
+    "fields": {
+      "card": {
+        "x": 17,
+        "y": 197,
+        "width": 341,
+        "height": 467.875
+      },
+      "button": {
+        "x": 41,
+        "y": 488.78125,
+        "width": 293,
+        "height": 54.5
+      },
+      "document": 812,
+      "viewport": 812,
+      "documentWidth": 375,
+      "scrollY": 0
+    },
+    "baseline": {
+      "card": {
+        "x": 17,
+        "y": 197,
+        "width": 341,
+        "height": 441.875
+      },
+      "button": {
+        "x": 41,
+        "y": 462.78125,
+        "width": 293,
+        "height": 54.5
+      },
+      "document": 812,
+      "viewport": 812,
+      "documentWidth": 375,
+      "scrollY": 0
+    },
+    "withToast": {
+      "card": {
+        "x": 17,
+        "y": 197,
+        "width": 341,
+        "height": 441.875
+      },
+      "button": {
+        "x": 41,
+        "y": 462.78125,
+        "width": 293,
+        "height": 54.5
+      },
+      "document": 812,
+      "viewport": 812,
+      "documentWidth": 375,
+      "scrollY": 0
+    }
+  }
+]

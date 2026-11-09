@@ -1,0 +1,8 @@
+.toast { position: fixed; z-index: 100; top: 84px; right: 20px; display: grid; grid-template-columns: 20px minmax(0, 1fr) 44px; align-items: start; gap: 10px; width: min(360px, calc(100% - 24px)); padding: 12px; border: 1px solid #b56348; border-radius: 10px; background: #321b10; color: #fff0cf; box-shadow: 0 6px 24px #160a0780; font: 400 14px/1.5 var(--xq-font-body); }
+.message { min-width: 0; padding-block: 2px; overflow-wrap: anywhere; }
+.icon { width: 20px; height: 20px; margin-top: 3px; color: #ffd0bf; }
+.close { display: grid; place-items: center; width: 44px; height: 44px; padding: 10px; border: 0; border-radius: 5px; background: transparent; color: inherit; cursor: pointer; }
+.close svg { width: 22px; height: 22px; }
+.close:hover { background: #ffffff14; }
+.close:focus-visible { outline: 3px solid #fff0cf; outline-offset: 2px; }
+@media (max-width: 480px) { .toast { top: 88px; right: 12px; } }

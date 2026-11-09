@@ -11,8 +11,9 @@ import type { OnlineState } from "./online-game-session";
 import type { Piece } from "@xiangqi/rules";
 import type { RoomThemeId } from "./room-theme";
 import { isRoomThemeId } from "./room-theme";
+import { casualRequest } from "./casual-client";
 
-export function useRoomSession() {
+export function useRoomSession(casual = false) {
   const [session, setSession] = useState<RoomSession | null>(null);
   const [savedSession, setSavedSession] = useState<RoomSession | null>(null);
   const starting = useRef(false);
@@ -32,6 +33,9 @@ export function useRoomSession() {
   const leaveFinished = useRef<(() => boolean) | null>(null);
   const [online, setOnline] = useState<OnlineState>({ snapshot: null, synced: false, pending: null, message: "", recovery: false });
   const [selectionEpoch, setSelectionEpoch] = useState(0);
+  const [departed,setDeparted] = useState<"closed"|"left"|null>(null);
+  const [waitingBusy,setWaitingBusy] = useState(false);
+  const waitingFlight = useRef(false);
 
   useEffect(() => {
     alive.current = true;
@@ -40,13 +44,14 @@ export function useRoomSession() {
       if (!active) return;
       const stored = loadRoomSession(() => window.localStorage, () => window.sessionStorage);
       setSavedSession(stored.session); setWarning(stored.warning);
+      if (casual && stored.session?.casual) {setSession(stored.session);setSavedSession(null);}
       setReady(true);
     });
     return () => {
       active = false; alive.current = false;
       requestController.current?.abort();
     };
-  }, []);
+  }, [casual]);
 
   useEffect(() => {
     if (!session) return;
@@ -187,6 +192,7 @@ export function useRoomSession() {
         stop(data.code === "AUTH_FAILED" ? "Phiên phòng không còn hợp lệ hoặc server đã khởi động lại."
           : data.code === "INVALID_HANDSHAKE" ? "Thông tin phiên phòng không hợp lệ." : "Backend chưa thể xác thực kết nối.",
           data.code === "AUTH_FAILED");
+        if(session!.casual && data.code === "AUTH_FAILED") setDeparted("closed");
         return;
       }
       setPhase("Không kết nối được backend"); setError("Kiểm tra backend, địa chỉ cấu hình và origin frontend cổng 3000.");
@@ -201,8 +207,13 @@ export function useRoomSession() {
     function onAttempt() { if (active && !terminal) setPhase("Đang kết nối lại"); }
     function onFailed() { if (active && !terminal) { setPhase("Đã dừng thử kết nối; tải lại trang để thử lại phiên đã lưu"); game.reconnectFailed(); } }
     function onGameState(data: unknown) { if (active && !terminal && verified) game.receiveSnapshot(data); }
+    function onLeft(data:unknown) {
+      if (!active || terminal || !session!.casual || !record(data) || !["ROOM_CLOSED","ROOM_LEFT"].includes(String(data.code))) return;
+      stop("",true); setDeparted(data.code === "ROOM_CLOSED" ? "closed" : "left");
+    }
     socket.on("connect", onConnect); socket.on("room:session", onSession); socket.on("room:state", onState);
     socket.on("game:state", onGameState);
+    socket.on("room:left",onLeft);
     socket.on("room:replaced", onReplaced); socket.on("connect_error", onConnectError); socket.on("disconnect", onDisconnect);
     socket.io.on("reconnect_attempt", onAttempt); socket.io.on("reconnect_failed", onFailed);
     socket.connect();
@@ -211,6 +222,7 @@ export function useRoomSession() {
       if (leaveFinished.current === exitFinished) leaveFinished.current = null;
       game.dispose(); if (gameSession.current === game) gameSession.current = null;
       socket.off("game:state", onGameState);
+      socket.off("room:left",onLeft);
       socket.off("connect", onConnect); socket.off("room:session", onSession); socket.off("room:state", onState);
       socket.off("room:replaced", onReplaced); socket.off("connect_error", onConnectError); socket.off("disconnect", onDisconnect);
       socket.io.off("reconnect_attempt", onAttempt); socket.io.off("reconnect_failed", onFailed);
@@ -229,7 +241,7 @@ export function useRoomSession() {
     busy.current = true; setLoading(true); setError("");
     const controller = new AbortController(); requestController.current = controller;
     try {
-      const next = await requestRoom(nickname, code, AbortSignal.any([controller.signal, AbortSignal.timeout(12000)]), themeId);
+      const next = await requestRoom(nickname, code, AbortSignal.any([controller.signal, AbortSignal.timeout(12000)]), themeId, casual);
       if (!alive.current || controller.signal.aborted) return;
       let saved = false;
       try { saved = saveRoomSession(window.localStorage, next); } catch { /* tiếp tục dùng trong bộ nhớ */ }
@@ -266,9 +278,21 @@ export function useRoomSession() {
   }
   function sendResign(): boolean { return replacingRoom.current ? false : gameSession.current?.sendResign() ?? false; }
   function exitFinishedRoom(): boolean { return leaveFinished.current?.() ?? false; }
+  async function waitingAction(action:"ready"|"leave", value?:boolean):Promise<void> {
+    if(!session?.casual || waitingFlight.current || online.snapshot?.game) return;
+    waitingFlight.current=true;setWaitingBusy(true);setError("");
+    try {
+      await casualRequest(`/${session.roomCode}/${action}`,action==="ready"?{ready:value}:{});
+      if(action==="leave") {
+        try {clearRoomSessionIfMatches(window.localStorage,session);clearRoomSessionIfMatches(window.sessionStorage,session);}catch{/* connection handler also attempts cleanup */}
+        setDeparted("left");
+      }
+    }catch(error){if(alive.current)setError(error instanceof Error?error.message:"Chưa thể xử lý thao tác phòng.");}
+    finally{waitingFlight.current=false;if(alive.current)setWaitingBusy(false);}
+  }
   const canResign = !switchingRoom && !!identity && online.synced && !online.pending && !online.recovery && online.snapshot?.game?.result.status === "playing";
   const canPlay = !switchingRoom && !!identity && online.synced && !online.pending && !online.recovery && !!online.snapshot?.playEnabled &&
     online.snapshot.game?.result.status === "playing" && online.snapshot.game.sideToMove === identity.seat;
   const canLeaveFinished = !switchingRoom && !online.recovery && !!online.snapshot?.game && online.snapshot.game.result.status !== "playing";
-  return { session, savedSession, continueRoom, newRoom, exitFinishedRoom, canLeaveFinished, switchingRoom, identity, snapshot, ready, loading, phase, error, warning, submit, online, canPlay, canResign, selectionEpoch, sendMove, sendResign };
+  return { session, savedSession, continueRoom, newRoom, exitFinishedRoom, canLeaveFinished, switchingRoom, identity, snapshot, ready, loading, phase, error, warning, submit, online, canPlay, canResign, selectionEpoch, sendMove, sendResign, departed, waitingBusy, waitingAction, clearError:()=>setError("") };
 }

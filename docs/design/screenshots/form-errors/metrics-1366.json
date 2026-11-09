@@ -1,0 +1,182 @@
+[
+  {
+    "form": "register",
+    "initial": {
+      "card": {
+        "x": 463,
+        "y": 96,
+        "width": 440,
+        "height": 644.09375
+      },
+      "button": {
+        "x": 500,
+        "y": 613,
+        "width": 366,
+        "height": 54.5
+      },
+      "viewport": 768,
+      "document": 768,
+      "width": 1366,
+      "documentWidth": 1366,
+      "scrollY": 0
+    },
+    "fields": {
+      "card": {
+        "x": 463,
+        "y": 96,
+        "width": 440,
+        "height": 644.09375
+      },
+      "button": {
+        "x": 500,
+        "y": 613,
+        "width": 366,
+        "height": 54.5
+      },
+      "viewport": 768,
+      "document": 768,
+      "width": 1366,
+      "documentWidth": 1366,
+      "scrollY": 0
+    },
+    "api": {
+      "card": {
+        "x": 463,
+        "y": 96,
+        "width": 440,
+        "height": 644.09375
+      },
+      "button": {
+        "x": 500,
+        "y": 613,
+        "width": 366,
+        "height": 54.5
+      },
+      "viewport": 768,
+      "document": 768,
+      "width": 1366,
+      "documentWidth": 1366,
+      "scrollY": 0
+    }
+  },
+  {
+    "form": "login",
+    "initial": {
+      "card": {
+        "x": 463,
+        "y": 96,
+        "width": 440,
+        "height": 527.09375
+      },
+      "button": {
+        "x": 500,
+        "y": 496,
+        "width": 366,
+        "height": 54.5
+      },
+      "viewport": 768,
+      "document": 768,
+      "width": 1366,
+      "documentWidth": 1366,
+      "scrollY": 0
+    },
+    "fields": {
+      "card": {
+        "x": 463,
+        "y": 96,
+        "width": 440,
+        "height": 527.09375
+      },
+      "button": {
+        "x": 500,
+        "y": 496,
+        "width": 366,
+        "height": 54.5
+      },
+      "viewport": 768,
+      "document": 768,
+      "width": 1366,
+      "documentWidth": 1366,
+      "scrollY": 0
+    },
+    "api": {
+      "card": {
+        "x": 463,
+        "y": 96,
+        "width": 440,
+        "height": 527.09375
+      },
+      "button": {
+        "x": 500,
+        "y": 496,
+        "width": 366,
+        "height": 54.5
+      },
+      "viewport": 768,
+      "document": 768,
+      "width": 1366,
+      "documentWidth": 1366,
+      "scrollY": 0
+    }
+  },
+  {
+    "form": "otp",
+    "initial": {
+      "card": {
+        "x": 463,
+        "y": 96,
+        "width": 440,
+        "height": 551.46875
+      },
+      "button": {
+        "x": 500,
+        "y": 474.78125,
+        "width": 366,
+        "height": 54.5
+      },
+      "viewport": 768,
+      "document": 768,
+      "width": 1366,
+      "documentWidth": 1366,
+      "scrollY": 0
+    },
+    "fields": {
+      "card": {
+        "x": 463,
+        "y": 96,
+        "width": 440,
+        "height": 551.46875
+      },
+      "button": {
+        "x": 500,
+        "y": 474.78125,
+        "width": 366,
+        "height": 54.5
+      },
+      "viewport": 768,
+      "document": 768,
+      "width": 1366,
+      "documentWidth": 1366,
+      "scrollY": 0
+    },
+    "api": {
+      "card": {
+        "x": 463,
+        "y": 96,
+        "width": 440,
+        "height": 551.46875
+      },
+      "button": {
+        "x": 500,
+        "y": 474.78125,
+        "width": 366,
+        "height": 54.5
+      },
+      "viewport": 768,
+      "document": 768,
+      "width": 1366,
+      "documentWidth": 1366,
+      "scrollY": 0
+    }
+  }
+]

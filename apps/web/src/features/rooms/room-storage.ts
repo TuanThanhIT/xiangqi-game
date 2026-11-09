@@ -8,7 +8,7 @@ function decode(raw: string | null): RoomSession | null {
   if (raw === null) return null;
   try {
     const data: unknown = JSON.parse(raw);
-    return isStoredSession(data) ? { roomCode: data.roomCode, seatToken: data.seatToken, seat: data.seat, nickname: data.nickname } : null;
+    return isStoredSession(data) ? { roomCode: data.roomCode, seatToken: data.seatToken, seat: data.seat, nickname: data.nickname, ...(data.casual ? {casual:true as const} : {}) } : null;
   } catch { return null; }
 }
 export function clearRoomSessionIfMatches(storage: StoragePort, expected: RoomSession): boolean {

@@ -173,3 +173,15 @@
 @media (min-width: 1024px) {
   .onlineLayout { grid-template-columns: minmax(240px, 320px) minmax(0, 608px); justify-content: center; align-items: start; }
 }
+
+
+.fieldError { display: block; margin-top: 4px; color: var(--xq-danger-text); font: 400 14px/1.5 var(--xq-font-body); overflow-wrap: anywhere; }
+.field input[aria-invalid=true] { border-color: var(--xq-danger-text); }
+@media (min-width: 1024px) {
+  .formPanel:has(.themePicker):not(:has([id="room-code"])) { max-width: 960px; padding: 16px; }
+  .formPanel:has(.themePicker):not(:has([id="room-code"])) h2 { margin-bottom: 8px; }
+  .formPanel:has(.themePicker):not(:has([id="room-code"])) .field { margin-top: 8px; }
+  .formPanel:has(.themePicker):not(:has([id="room-code"])) .help { margin-block: 4px; }
+  .formPanel:has(.themePicker):not(:has([id="room-code"])) .themeChoices { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .formPanel:has(.themePicker):not(:has([id="room-code"])) .themePreview { height: 64px; aspect-ratio: auto; }
+}

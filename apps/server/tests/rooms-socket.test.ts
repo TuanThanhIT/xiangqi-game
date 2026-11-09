@@ -27,7 +27,7 @@ test("Socket.IO: xác thực, trạng thái phòng, thay ghế, cạnh tranh và
     const rooms = app.get<RoomsService>(RoomsService);
     service = rooms;
     // Lấy namespace từ gateway trong test, không tạo endpoint hoặc cấu hình công khai.
-    const { RoomsGateway } = await import("../src/rooms/rooms.gateway");
+    const { RoomsGateway } = await import("../src/rooms/rooms.gateway.js");
     const gateway = app.get(RoomsGateway) as unknown as { server: Namespace };
     const server = gateway.server;
 
@@ -141,7 +141,7 @@ test("Socket.IO: xác thực, trạng thái phòng, thay ghế, cạnh tranh và
         try { assert.deepEqual(await resign(sb, id), ack); assert.equal(repeats, 0); } finally { sb.off("game:state", repeated); }
         const stale = server.sockets.get(sb.id!)!;
         const gone = wait(sb, "disconnect"); const restored = await connect(black); await gone;
-        const { RoomsGateway } = await import("../src/rooms/rooms.gateway");
+        const { RoomsGateway } = await import("../src/rooms/rooms.gateway.js");
         const rejected = app.get(RoomsGateway).handleResign(stale as never, { requestId: id });
         assert.ok(!rejected.ok && rejected.code === "SOCKET_NOT_ACTIVE");
         assert.deepEqual(await resign(restored, id), ack);
@@ -219,7 +219,7 @@ test("Socket.IO: xác thực, trạng thái phòng, thay ghế, cạnh tranh và
       // Chủ ghế mới thay thế; gọi handler trực tiếp bằng server socket cũ vẫn bị từ chối.
       const staleServer = server.sockets.get(restored.id!)!;
       const replaced = wait(restored, "disconnect"); await connect(red); await replaced;
-      const { RoomsGateway } = await import("../src/rooms/rooms.gateway");
+      const { RoomsGateway } = await import("../src/rooms/rooms.gateway.js");
       const staleAck = app.get(RoomsGateway).handleMove(staleServer as never, { requestId: id, expectedRevision: 0,
         pieceId: "red-soldier-0", to: { row: 5, col: 0 } });
       assert.ok(!staleAck.ok && staleAck.code === "SOCKET_NOT_ACTIVE");

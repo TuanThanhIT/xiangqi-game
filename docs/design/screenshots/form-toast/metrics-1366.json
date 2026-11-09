@@ -1,0 +1,227 @@
+[
+  {
+    "form": "register",
+    "clean": {
+      "card": {
+        "x": 663.828125,
+        "y": 151.953125,
+        "width": 498.171875,
+        "height": 528.09375
+      },
+      "button": {
+        "x": 699.828125,
+        "y": 551.953125,
+        "width": 426.171875,
+        "height": 54.5
+      },
+      "document": 768,
+      "viewport": 768,
+      "documentWidth": 1366,
+      "scrollY": 0
+    },
+    "fields": {
+      "card": {
+        "x": 663.828125,
+        "y": 112.953125,
+        "width": 498.171875,
+        "height": 606.09375
+      },
+      "button": {
+        "x": 699.828125,
+        "y": 590.953125,
+        "width": 426.171875,
+        "height": 54.5
+      },
+      "document": 768,
+      "viewport": 768,
+      "documentWidth": 1366,
+      "scrollY": 0
+    },
+    "baseline": {
+      "card": {
+        "x": 663.828125,
+        "y": 151.953125,
+        "width": 498.171875,
+        "height": 528.09375
+      },
+      "button": {
+        "x": 699.828125,
+        "y": 551.953125,
+        "width": 426.171875,
+        "height": 54.5
+      },
+      "document": 768,
+      "viewport": 768,
+      "documentWidth": 1366,
+      "scrollY": 0
+    },
+    "withToast": {
+      "card": {
+        "x": 663.828125,
+        "y": 151.953125,
+        "width": 498.171875,
+        "height": 528.09375
+      },
+      "button": {
+        "x": 699.828125,
+        "y": 551.953125,
+        "width": 426.171875,
+        "height": 54.5
+      },
+      "document": 768,
+      "viewport": 768,
+      "documentWidth": 1366,
+      "scrollY": 0
+    }
+  },
+  {
+    "form": "login",
+    "clean": {
+      "card": {
+        "x": 663.828125,
+        "y": 199.453125,
+        "width": 498.171875,
+        "height": 433.09375
+      },
+      "button": {
+        "x": 699.828125,
+        "y": 504.453125,
+        "width": 426.171875,
+        "height": 54.5
+      },
+      "document": 768,
+      "viewport": 768,
+      "documentWidth": 1366,
+      "scrollY": 0
+    },
+    "fields": {
+      "card": {
+        "x": 663.828125,
+        "y": 173.453125,
+        "width": 498.171875,
+        "height": 485.09375
+      },
+      "button": {
+        "x": 699.828125,
+        "y": 530.453125,
+        "width": 426.171875,
+        "height": 54.5
+      },
+      "document": 768,
+      "viewport": 768,
+      "documentWidth": 1366,
+      "scrollY": 0
+    },
+    "baseline": {
+      "card": {
+        "x": 663.828125,
+        "y": 199.453125,
+        "width": 498.171875,
+        "height": 433.09375
+      },
+      "button": {
+        "x": 699.828125,
+        "y": 504.453125,
+        "width": 426.171875,
+        "height": 54.5
+      },
+      "document": 768,
+      "viewport": 768,
+      "documentWidth": 1366,
+      "scrollY": 0
+    },
+    "withToast": {
+      "card": {
+        "x": 663.828125,
+        "y": 199.453125,
+        "width": 498.171875,
+        "height": 433.09375
+      },
+      "button": {
+        "x": 699.828125,
+        "y": 504.453125,
+        "width": 426.171875,
+        "height": 54.5
+      },
+      "document": 768,
+      "viewport": 768,
+      "documentWidth": 1366,
+      "scrollY": 0
+    }
+  },
+  {
+    "form": "otp",
+    "clean": {
+      "card": {
+        "x": 663.828125,
+        "y": 174.0625,
+        "width": 498.171875,
+        "height": 483.875
+      },
+      "button": {
+        "x": 699.828125,
+        "y": 465.84375,
+        "width": 426.171875,
+        "height": 54.5
+      },
+      "document": 768,
+      "viewport": 768,
+      "documentWidth": 1366,
+      "scrollY": 0
+    },
+    "fields": {
+      "card": {
+        "x": 663.828125,
+        "y": 161.0625,
+        "width": 498.171875,
+        "height": 509.875
+      },
+      "button": {
+        "x": 699.828125,
+        "y": 478.84375,
+        "width": 426.171875,
+        "height": 54.5
+      },
+      "document": 768,
+      "viewport": 768,
+      "documentWidth": 1366,
+      "scrollY": 0
+    },
+    "baseline": {
+      "card": {
+        "x": 663.828125,
+        "y": 174.0625,
+        "width": 498.171875,
+        "height": 483.875
+      },
+      "button": {
+        "x": 699.828125,
+        "y": 465.84375,
+        "width": 426.171875,
+        "height": 54.5
+      },
+      "document": 768,
+      "viewport": 768,
+      "documentWidth": 1366,
+      "scrollY": 0
+    },
+    "withToast": {
+      "card": {
+        "x": 663.828125,
+        "y": 174.0625,
+        "width": 498.171875,
+        "height": 483.875
+      },
+      "button": {
+        "x": 699.828125,
+        "y": 465.84375,
+        "width": 426.171875,
+        "height": 54.5
+      },
+      "document": 768,
+      "viewport": 768,
+      "documentWidth": 1366,
+      "scrollY": 0
+    }
+  }
+]

@@ -2,10 +2,10 @@ import { isRoomThemeId } from "./room-theme";
 import type { RoomThemeId } from "./room-theme";
 
 export type Seat = "red" | "black";
-export interface RoomSession { roomCode: string; seatToken: string; seat: Seat; nickname: string }
+export interface RoomSession { roomCode: string; seatToken: string; seat: Seat; nickname: string; casual?: true }
 export interface StoredSession extends RoomSession { version: 1 }
-export interface PublicPlayer { nickname: string; side: Seat; connected: boolean }
-export interface RoomSnapshot { roomCode: string; themeId: RoomThemeId; players: { red: PublicPlayer; black: PublicPlayer | null } }
+export interface PublicPlayer { nickname: string; side: Seat; connected: boolean; ready?: boolean; avatar?: string | null }
+export interface RoomSnapshot { roomCode: string; themeId: RoomThemeId; casual?: true; players: { red: PublicPlayer; black: PublicPlayer | null } }
 export interface RoomIdentity { roomCode: string; seat: Seat }
 
 export const errorMessages = {
@@ -33,7 +33,7 @@ export function isNickname(value: unknown): value is string {
   return typeof value === "string" && value === value.trim() && Array.from(value).length >= 1 && Array.from(value).length <= 30;
 }
 export function isSession(value: unknown): value is RoomSession {
-  return record(value) && keys(value, ["roomCode", "seatToken", "seat", "nickname"]) &&
+  return record(value) && keys(value, ["roomCode", "seatToken", "seat", "nickname", ...(value.casual === true ? ["casual"] : [])]) &&
     isCode(value.roomCode) && typeof value.seatToken === "string" && /^[A-Za-z0-9_-]{43}$/.test(value.seatToken) &&
     isSeat(value.seat) && isNickname(value.nickname);
 }
@@ -45,14 +45,15 @@ export function isStoredSession(value: unknown): value is StoredSession {
 export function isIdentity(value: unknown): value is RoomIdentity {
   return record(value) && keys(value, ["roomCode", "seat"]) && isCode(value.roomCode) && isSeat(value.seat);
 }
-function isPlayer(value: unknown, side: Seat): value is PublicPlayer {
-  return record(value) && keys(value, ["nickname", "side", "connected"]) &&
+function isPlayer(value: unknown, side: Seat, casual = false): value is PublicPlayer {
+  return record(value) && keys(value, ["nickname", "side", "connected", ...(casual ? ["ready","avatar"] : [])]) &&
+    (!casual || (typeof value.ready === "boolean" && (value.avatar === null || (typeof value.avatar === "string" && /^\/(?!\/)[^\s]*$/.test(value.avatar))))) &&
     isNickname(value.nickname) && value.side === side && typeof value.connected === "boolean";
 }
 export function isSnapshot(value: unknown): value is RoomSnapshot {
-  return record(value) && keys(value, ["roomCode", "themeId", "players"]) && isCode(value.roomCode) && isRoomThemeId(value.themeId) &&
-    record(value.players) && keys(value.players, ["red", "black"]) && isPlayer(value.players.red, "red") &&
-    (value.players.black === null || isPlayer(value.players.black, "black"));
+  return record(value) && keys(value, ["roomCode", "themeId", "players", ...(value.casual === true ? ["casual"] : [])]) && isCode(value.roomCode) && isRoomThemeId(value.themeId) &&
+    record(value.players) && keys(value.players, ["red", "black"]) && isPlayer(value.players.red, "red",value.casual === true) &&
+    (value.players.black === null || isPlayer(value.players.black, "black",value.casual === true));
 }
 export function isBackendError(value: unknown, status: number): value is { statusCode: number; code: keyof typeof errorMessages; message: string } {
   return record(value) && keys(value, ["statusCode", "code", "message"]) && value.statusCode === status &&

@@ -12,34 +12,24 @@ function elements(value) {
   return value?.props ? [value, ...elements(value.props.children)] : [];
 }
 
-test("Menu: SSR không đọc storage; mount mới hiện tiếp tục; các route đúng và tính năng tương lai khóa", async () => {
-  let reads = 0, cursor = 0; const slots = [], effects = [];
-  const mocks = { "next/link": Link, "./main-menu.module.css": css,
-    "@/features/rooms/room-storage": { loadRoomSession: () => { reads++; return { session, warning: "" }; } } };
-  const MenuSSR = loader(mocks)("apps/web/src/components/MainMenu.tsx").default;
-  const html = renderToStaticMarkup(React.createElement(MenuSSR));
-  assert.equal(reads, 0); assert.ok(!html.includes("Tiếp tục phòng"));
-  for (const href of ["/play?mode=create", "/play?mode=join", "/local"]) assert.ok(html.includes(`href="${href}"`));
-  assert.deepEqual([...html.matchAll(/href="([^"]+)"/g)].map((m) => m[1]), ["/play?mode=create", "/play?mode=join", "/local"]);
-  for (const label of ["Đánh với máy", "Tài khoản và hồ sơ", "Bảng xếp hạng", "Bộ sưu tập nhân vật", "Cửa hàng và phần thưởng", "Sắp ra mắt"]) assert.ok(html.includes(label));
-  assert.match(html, /<button[^>]*disabled/);
-  const Menu = loader({ ...mocks, react: {
-    useState(initial) { const i = cursor++; slots[i] ??= initial; return [slots[i], (v) => { slots[i] = v; }]; },
-    useEffect(fn) { effects.push(fn); },
-  } })("apps/web/src/components/MainMenu.tsx").default;
-  const previous = globalThis.window; globalThis.window = {};
-  try {
-    cursor = 0; Menu(); const cleanup = effects.shift()(); await Promise.resolve();
-    cursor = 0; const tree = Menu();
-    assert.equal(reads, 1);
-    const link = elements(tree).find((e) => e.type === Link && e.props.href === "/play");
-    assert.ok(link); const markup = renderToStaticMarkup(tree);
-    assert.ok(markup.includes(session.nickname));
-    assert.deepEqual([...markup.matchAll(/href="([^"]+)"/g)].map((m) => m[1]), ["/play", "/play?mode=create", "/play?mode=join", "/local"]);
-    assert.ok(markup.includes("ABC234")); assert.ok(!markup.includes(session.seatToken)); cleanup();
-  } finally { globalThis.window = previous; }
+test("Cổng game: vào sảnh kiểm tra phiên, đăng nhập riêng, local không cần tài khoản; không đọc token ghế phòng", async () => {
+  let reads = 0;
+  const Menu = loader({ "next/link": Link,
+    "./PortalBoard": { __esModule: true, default: () => React.createElement("div", { role: "img", "aria-label": "Bàn cờ tướng" }) },
+    "@/features/rooms/room-storage": { loadRoomSession: () => { reads++; return { session }; } },
+  })("apps/web/src/components/MainMenu.tsx").default;
+  const html = renderToStaticMarkup(React.createElement(Menu));
+  assert.equal(reads, 0);
+  assert.deepEqual([...html.matchAll(/href="([^"]+)"/g)].map((m) => m[1]), ["/login", "/lobby", "/local"]);
+  for (const label of ["Khai cuộc", "Cờ tướng", "Cờ vua", "Cờ úp", "Vào game", "Hẹn bạn một ván, so tài từng nước.", "Chơi cùng thiết bị", "Đăng nhập"]) assert.ok(html.includes(label));
+  assert.ok(!html.includes(session.seatToken));
+  const Login = loader({ "next/link": Link, "next/navigation": { useRouter: () => ({ replace() {} }) } })("apps/web/src/app/login/page.tsx").default;
+  const login = renderToStaticMarkup(await Login());
+  assert.ok(login.toLowerCase().includes('autocomplete="username"'));
+  assert.ok(login.toLowerCase().includes('autocomplete="current-password"'));
+  assert.ok(login.includes('aria-label="Hiện mật khẩu"'));
+  assert.ok(login.includes('href="/"'));
 });
-
 test("Route /play chọn đúng form; /local vẫn có bàn khai cuộc và Ván mới", async () => {
   const load = loader({ "next/link": Link, "./play-room.module.css": css, "next/navigation": { useRouter: () => ({ push() {} }) } });
   const Page = load("apps/web/src/app/play/page.tsx").default;
@@ -66,7 +56,7 @@ test("Màn hình kết quả: Về menu dùng router; Tạo phòng mới mở đ
   const room = { ready: true, session, online: { synced: true, snapshot: { game: { result: { status: "finished" } } } },
     canLeaveFinished: true, exitFinishedRoom: () => { exits++; return true; } };
   const load = loader({ "next/navigation": { useRouter: () => ({ push: (url) => pushed.push(url) }) }, "./play-room.module.css": css,
-    "./useRoomSession": { useRoomSession: () => room }, react: { useState: (initial) => {
+    "./useRoomSession": { useRoomSession: () => room }, react: { useEffect: () => {}, useState: (initial) => {
       const i = cursor++; if (!(i in state)) state[i] = initial; return [state[i], (v) => { state[i] = v; }];
     } } });
   const Play = load("apps/web/src/features/rooms/PlayRoom.tsx").default;

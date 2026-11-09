@@ -1,4 +1,5 @@
-import { OnModuleDestroy } from "@nestjs/common";
+import { OnModuleDestroy, Optional } from "@nestjs/common";
+import { SessionService } from "../auth/session/session.service";
 import { ConnectedSocket, MessageBody, SubscribeMessage, OnGatewayConnection, OnGatewayDisconnect, OnGatewayInit, WebSocketGateway } from "@nestjs/websockets";
 import type { Namespace, Socket } from "socket.io";
 import type { IncomingMessage } from "node:http";
@@ -28,16 +29,17 @@ function connectionError(code: string, message: string): Error & { data: { code:
 export class RoomsGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect, OnModuleDestroy {
   private server!: Namespace;
   private unsubscribe?: () => void;
+  private unsubscribeDeparture?: () => void;
 
-  constructor(private readonly rooms: RoomsService) {}
+  constructor(private readonly rooms: RoomsService, @Optional() private readonly sessions?: SessionService) {}
 
   afterInit(server: Namespace): void {
     this.server = server;
-    server.use((socket, next) => {
+    server.use((socket, next) => { void (async () => {
       try {
         const auth: unknown = socket.handshake.auth;
         if (typeof auth !== "object" || auth === null || Array.isArray(auth) ||
-            Object.keys(auth).length !== 2 || !("roomCode" in auth) || !("seatToken" in auth) ||
+            ![2,3].includes(Object.keys(auth).length) || Object.keys(auth).some(key=>!["roomCode","seatToken","accessToken"].includes(key)) || !("roomCode" in auth) || !("seatToken" in auth) ||
             typeof auth.roomCode !== "string" || !/^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}$/.test(auth.roomCode) ||
             typeof auth.seatToken !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(auth.seatToken)) {
           next(connectionError("INVALID_HANDSHAKE", "Thông tin kết nối sai định dạng."));
@@ -48,12 +50,26 @@ export class RoomsGateway implements OnGatewayInit, OnGatewayConnection, OnGatew
           next(connectionError("AUTH_FAILED", "Thông tin kết nối không hợp lệ."));
           return;
         }
+        const accountId = this.rooms.accountForSeat(identity);
+        if (accountId) {
+          const token = "accessToken" in auth && typeof auth.accessToken === "string" ? auth.accessToken : "";
+          let authenticated = false;
+          try { authenticated = (await this.sessions?.authenticate(`Bearer ${token}`))?.id === accountId; } catch { /* safe handshake error */ }
+          if (!authenticated || !this.rooms.authenticate(auth.roomCode,auth.seatToken)) {
+            next(connectionError("AUTH_FAILED","Phiên tài khoản hoặc ghế không hợp lệ.")); return;
+          }
+        }
         socket.data.identity = identity;
         socket.handshake.auth = {}; // Không giữ bản sao token trong metadata socket.
         next();
       } catch {
         next(connectionError("INTERNAL_ERROR", "Không thể kết nối phòng."));
       }
+    })(); });
+    this.unsubscribeDeparture = this.rooms.onDeparture(event => {
+      const target = event.side === "red" ? this.server.to(this.channel(event.roomCode)) : event.socketId ? this.server.to(event.socketId) : null;
+      target?.emit("room:left",{code:event.side === "red" ? "ROOM_CLOSED" : "ROOM_LEFT"});
+      target?.disconnectSockets(true);
     });
     this.unsubscribe = this.rooms.onRoomChange((code) => {
       this.server.to(this.channel(code)).emit("room:state", this.rooms.publicState(code));
@@ -108,7 +124,7 @@ export class RoomsGateway implements OnGatewayInit, OnGatewayConnection, OnGatew
     } catch { return moveFailure("INTERNAL_ERROR", null); }
   }
 
-  onModuleDestroy(): void { this.unsubscribe?.(); }
+  onModuleDestroy(): void { this.unsubscribe?.(); this.unsubscribeDeparture?.(); }
   @SubscribeMessage("game:resign")
   handleResign(@ConnectedSocket() socket: RoomSocket, @MessageBody() payload: unknown): ResignAck {
     try {

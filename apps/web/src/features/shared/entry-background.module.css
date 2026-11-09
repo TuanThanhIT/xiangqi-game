@@ -1,0 +1,2 @@
+.scene.scene { background-image: linear-gradient(#07161f14, #07161f30), url('/images/entry-background.png'); background-size: cover; background-position: center; background-repeat: no-repeat; }
+@media (max-width: 760px) { .scene.scene { background-position: 56% center; } }

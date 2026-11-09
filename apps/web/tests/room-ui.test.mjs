@@ -13,7 +13,7 @@ function elements(value) {
 }
 function hooks() {
   const slots = []; let cursor = 0;
-  return { react: { useState(initial) { const i = cursor++; if (!(i in slots)) slots[i] = initial;
+  return { react: { useRef: () => ({ current: null }), useState(initial) { const i = cursor++; if (!(i in slots)) slots[i] = initial;
     return [slots[i], (value) => { slots[i] = value; }]; } },
     render(Component, props) { cursor = 0; return Component(props); } };
 }
@@ -23,16 +23,16 @@ test("RoomForm: label/help/lỗi nối input, loading khóa đúng nút, chỉ m
   for (const mode of ["create", "join", "both"]) for (const loading of [false, true]) {
     const markup = html(Form, { mode, loading, errorId: "room-error", submit() {} });
     assert.ok(markup.includes('for="room-nickname"'));
-    assert.ok(markup.includes('aria-describedby="nickname-help room-error"'));
+    assert.ok(markup.includes('aria-describedby="nickname-help"'));
     assert.ok(markup.includes('id="nickname-help"'));
     assert.equal(markup.includes('id="room-code"'), mode !== "create");
-    if (mode !== "create") assert.ok(markup.includes('aria-describedby="code-help room-error"'));
+    if (mode !== "create") assert.ok(markup.includes('aria-describedby="code-help"'));
     const buttons = [...markup.matchAll(/<button([^>]+)>/g)];
     assert.equal(buttons.length, mode === "both" ? 2 : 1);
     assert.ok(buttons.every((m) => m[1].includes('disabled=""') === loading));
     assert.ok(markup.includes('aria-busy="' + loading + '"'));
     assert.ok(markup.includes('class="buttonSizer" aria-hidden="true"'));
-    assert.equal((markup.match(/role="alert"/g) ?? []).length, 0); // Lỗi có đúng một vùng ở PlayRoom.
+    assert.equal((markup.match(/role="alert"/g) ?? []).length, 0); // Form sạch không render vùng lỗi rỗng.
   }
 });
 

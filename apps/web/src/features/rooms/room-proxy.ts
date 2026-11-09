@@ -1,13 +1,21 @@
 import { errorMessages, isBackendError, isCode, isNickname, isSession, keys, record } from "./room-contract";
 import { getBackendHttpOrigin } from "./room-config";
 import { isRoomThemeId } from "./room-theme";
+import { readRequestId } from "./request-id";
+import { backendFetch, backendJson, gatewayFailure } from "../shared/backend-http";
 
-function json(body: object, status: number): Response {
+function jsonResponse(body: object, status: number): Response {
   return Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
 }
-const failure = (status: number, code: string, message: string) => json({ statusCode: status, code, message }, status);
 
 export async function proxyRoomRequest(request: Request, code?: string): Promise<Response> {
+  let requestId = readRequestId(request.headers.get("x-request-id")) ?? crypto.randomUUID();
+  const json = (body: object, status: number): Response => {
+    const response = jsonResponse(body, status);
+    response.headers.set("x-request-id", requestId);
+    return response;
+  };
+  const failure = (status: number, code: string, message: string) => json({ statusCode: status, code, message }, status);
   if (code !== undefined && !isCode(code)) return failure(400, "INVALID_ROOM_CODE", errorMessages.INVALID_ROOM_CODE);
   let body: unknown;
   try { body = await request.json(); } catch { return failure(400, "INVALID_JSON", errorMessages.INVALID_JSON); }
@@ -22,18 +30,11 @@ export async function proxyRoomRequest(request: Request, code?: string): Promise
   let base: string;
   try { base = getBackendHttpOrigin(); } catch { return failure(503, "CONFIG_ERROR", "Chưa cấu hình backend HTTP hợp lệ."); }
   try {
-    const upstream = await fetch(base + (code === undefined ? "/rooms" : `/rooms/${code}/join`), {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ nickname, ...(create ? { themeId } : {}) }),
-      cache: "no-store", redirect: "error", signal: AbortSignal.timeout(8000),
+    const upstream = await backendFetch(base + (code === undefined ? "/rooms" : `/rooms/${code}/join`), {
+      method: "POST", headers: { "Content-Type": "application/json", "x-request-id": requestId }, body: JSON.stringify({ nickname, ...(create ? { themeId } : {}) }),
     });
-    if (!/^application\/json\b/i.test(upstream.headers.get("content-type") ?? "")) {
-      return failure(502, "BAD_GATEWAY", "Backend trả dữ liệu không đúng hợp đồng.");
-    }
-    let data: unknown;
-    try { data = await upstream.json(); } catch (error: unknown) {
-      if (error instanceof SyntaxError) return failure(502, "BAD_GATEWAY", "Backend trả dữ liệu không đúng hợp đồng.");
-      throw error;
-    }
+    requestId = readRequestId(upstream.headers.get("x-request-id")) ?? requestId;
+    const data = await backendJson(upstream);
     const expectedStatus = code === undefined ? 201 : 200;
     if (upstream.status === expectedStatus && isSession(data) && data.seat === (code === undefined ? "red" : "black") &&
         data.nickname === nickname && (code === undefined || data.roomCode === code)) {
@@ -44,9 +45,7 @@ export async function proxyRoomRequest(request: Request, code?: string): Promise
     }
     return failure(502, "BAD_GATEWAY", "Backend trả dữ liệu không đúng hợp đồng.");
   } catch (error: unknown) {
-    if (error instanceof Error && ["TimeoutError", "AbortError"].includes(error.name)) {
-      return failure(504, "UPSTREAM_TIMEOUT", "Backend chưa trả lời kịp. Yêu cầu có thể đã thành công; không tự gửi lại.");
-    }
-    return failure(502, "UPSTREAM_UNAVAILABLE", "Không nhận được kết quả từ backend. Yêu cầu có thể đã thành công; không tự gửi lại.");
+    const problem = gatewayFailure(error);
+    return failure(problem.status, problem.code, problem.message);
   }
 }

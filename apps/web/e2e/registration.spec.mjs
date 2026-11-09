@@ -1,0 +1,91 @@
+import { test, expect } from "@playwright/test";
+import { randomBytes, randomUUID } from "node:crypto";
+import { createRequire } from "node:module";
+import { mkdir, readFile, rm } from "node:fs/promises";
+import { resolve } from "node:path";
+
+const require = createRequire(import.meta.url);
+const { DatabaseService } = require("../../server/dist/db/database.service.js");
+const { accounts, emailSends } = require("../../server/dist/db/schema.js");
+const { mailboxDirectory, mailboxFilename } = require("../../server/dist/auth/otp/delivery/otp-mailer.js");
+const { eq, sql } = require("drizzle-orm");
+
+test("Đăng ký → OTP (dán mã/lỗi/mạng) → đăng nhập → lobby", async ({ page, context }, info) => {
+  test.skip(process.env.OTP_MAIL_MODE === "smtp", "Registration E2E reads local mailboxes; do not send test OTP through live SMTP.");
+  const database = new DatabaseService(), db = database.db;
+  const suffix = randomUUID().slice(0, 8), email = `signup-${suffix}@xiangqi.test`, nickname = `Kỳ thủ ${suffix}`;
+  const password = randomBytes(24).toString("base64url");
+  const mailbox = resolve(mailboxDirectory(), mailboxFilename(email));
+  const shots = resolve(process.env.AUTH_SCREENSHOTS_DIR ?? "../../docs/design/screenshots/registration");
+  try {
+    expect((await db.execute(sql`select current_database() as name`)).rows[0].name === "xiangqi_dev").toBe(true);
+    await mkdir(shots, { recursive: true });
+    await page.goto("/login");
+    await page.getByRole("link", { name: "Đăng ký", exact: true }).click();
+    await expect(page).toHaveURL(/\/register$/);
+    await page.screenshot({ path: resolve(shots, `register-${info.project.name}.png`), fullPage: true });
+    await page.getByLabel("Biệt danh", { exact: true }).fill(`  ${nickname}  `);
+    await page.getByLabel("Email", { exact: true }).fill(email);
+    await page.getByLabel("Mật khẩu", { exact: true }).fill(password);
+    await page.getByLabel("Mật khẩu", { exact: true }).press("Enter");
+    await expect(page).toHaveURL(/\/verify-email\?account=/);
+    await expect(page.getByRole("heading", { name: "Xác minh email", exact: true })).toBeVisible();
+    await expect(page.getByText(/s\*\*\*@xiangqi.test/)).toBeVisible();
+    await expect(page.getByText(/Gửi lại mã sau/)).toBeVisible();
+    const mail = JSON.parse(await readFile(mailbox, "utf8"));
+    expect(await page.evaluate(() => !document.cookie.includes("xq_refresh"))).toBe(true);
+    expect((await context.cookies()).some((cookie) => cookie.name === "xq_refresh")).toBe(false);
+    await page.screenshot({ path: resolve(shots, `otp-${info.project.name}.png`), fullPage: true });
+    const codeInput = page.getByLabel("Mã xác minh", { exact: true });
+    const wrong = mail.code === "000000" ? "111111" : "000000";
+    await codeInput.fill(wrong);
+    await codeInput.press("Enter");
+    await expect(page.getByText("Mã xác minh không đúng.", { exact: true })).toBeVisible();
+    await codeInput.fill("");
+    await page.screenshot({ path: resolve(shots, `otp-error-${info.project.name}.png`), fullPage: true });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    // Existing pending email enters OTP after correct password, without another send.
+    await page.getByRole("link", { name: "Về đăng nhập", exact: true }).click();
+    await page.getByLabel("Email", { exact: true }).fill(email);
+    await page.getByLabel("Mật khẩu", { exact: true }).fill(password);
+    await page.getByLabel("Mật khẩu", { exact: true }).press("Enter");
+    await expect(page).toHaveURL(/\/verify-email\?account=/);
+    await expect(page.getByText(/s\*\*\*@xiangqi.test/)).toBeVisible();
+    const sameMail = JSON.parse(await readFile(mailbox, "utf8"));
+    expect(sameMail.id === mail.id).toBe(true);
+    await page.route("**/api/auth/verification/verify", (route) => route.abort("internetdisconnected"), { times: 1 });
+    await page.getByLabel("Mã xác minh", { exact: true }).fill(wrong);
+    await page.getByRole("button", { name: "Xác minh", exact: true }).click();
+    await expect(page.getByText(/Không kết nối được máy chủ/)).toBeVisible();
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    await page.evaluate((value) => navigator.clipboard.writeText(value), mail.code);
+    await page.getByLabel("Mã xác minh", { exact: true }).focus();
+    await page.keyboard.press("Control+A");
+    await page.keyboard.press("Control+V");
+    const responseWait = page.waitForResponse((response) => response.url().endsWith("/verification/verify") && response.status() === 200);
+    await page.getByLabel("Mã xác minh", { exact: true }).press("Enter");
+    const response = await responseWait;
+    expect(!!response.headers()["x-request-id"]).toBe(true);
+    expect(response.headers()["cache-control"]).toBe("no-store");
+    expect(response.headers()["set-cookie"] === undefined).toBe(true);
+    await expect(page).toHaveURL(/\/login\?verified=1$/);
+    await expect(page.getByText(/Xác minh email thành công/)).toBeVisible();
+    await page.screenshot({ path: resolve(shots, `verified-${info.project.name}.png`), fullPage: true });
+    await page.getByLabel("Email", { exact: true }).fill(email);
+    await page.getByLabel("Mật khẩu", { exact: true }).fill(password);
+    await page.getByLabel("Mật khẩu", { exact: true }).press("Enter");
+    await expect(page).toHaveURL(/\/lobby$/);
+    await expect(page.getByText(nickname, { exact: true })).toBeVisible();
+    await page.reload();
+    await expect(page.getByText(nickname, { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: /^Tài khoản / }).click();
+  await page.getByRole("menuitem", { name: "Đăng xuất", exact: true }).click();
+    await expect(page).toHaveURL(/\/login$/);
+  } finally {
+    await db.delete(accounts).where(eq(accounts.emailKey, email));
+    await db.delete(emailSends).where(eq(emailSends.emailKey, email));
+    await database.onApplicationShutdown();
+    // Delete only this test's exact mailbox file; never enumerate the user's mailbox.
+    await rm(mailbox, { force: true });
+  }
+});

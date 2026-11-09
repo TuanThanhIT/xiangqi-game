@@ -1,0 +1,56 @@
+[
+  {
+    "name": "login",
+    "height": 768,
+    "document": 768,
+    "width": 1366,
+    "documentWidth": 1366,
+    "header": 64,
+    "frame": {
+      "x": 203,
+      "y": 166,
+      "width": 960,
+      "height": 500,
+      "top": 166,
+      "right": 1163,
+      "bottom": 666,
+      "left": 203
+    }
+  },
+  {
+    "name": "register",
+    "height": 768,
+    "document": 768,
+    "width": 1366,
+    "documentWidth": 1366,
+    "header": 64,
+    "frame": {
+      "x": 203,
+      "y": 150.953125,
+      "width": 960,
+      "height": 530.09375,
+      "top": 150.953125,
+      "right": 1163,
+      "bottom": 681.046875,
+      "left": 203
+    }
+  },
+  {
+    "name": "otp",
+    "height": 768,
+    "document": 768,
+    "width": 1366,
+    "documentWidth": 1366,
+    "header": 64,
+    "frame": {
+      "x": 203,
+      "y": 166,
+      "width": 960,
+      "height": 500,
+      "top": 166,
+      "right": 1163,
+      "bottom": 666,
+      "left": 203
+    }
+  }
+]

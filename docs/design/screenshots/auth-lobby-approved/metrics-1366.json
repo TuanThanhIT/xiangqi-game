@@ -1,0 +1,18 @@
+{
+  "normal": {
+    "height": 768,
+    "client": 768,
+    "document": 768,
+    "width": 1366,
+    "documentWidth": 1366,
+    "scrollY": 0
+  },
+  "resumed": {
+    "height": 768,
+    "client": 768,
+    "document": 768,
+    "width": 1366,
+    "documentWidth": 1366,
+    "scrollY": 0
+  }
+}

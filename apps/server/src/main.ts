@@ -11,7 +11,7 @@ async function bootstrap(): Promise<void> {
   await app.listen(3001);
 }
 
-void bootstrap().catch((error: unknown) => {
-  console.error("Không thể khởi động backend NestJS tại cổng 3001:", error);
+void bootstrap().catch(() => {
+  console.error("Không thể khởi động backend NestJS tại cổng 3001. Kiểm tra cấu hình và kết nối dịch vụ.");
   process.exit(1);
 });

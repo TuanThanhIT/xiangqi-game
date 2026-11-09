@@ -37,7 +37,7 @@ test("Bộ chọn: 5 radio có tên, preview nhỏ, dấu chọn; create gửi I
   const disabled = renderToStaticMarkup(React.createElement(Picker, { value: "snow", disabled: true, onChange() {} }));
   assert.ok(disabled.includes('<fieldset')); assert.ok(disabled.includes('disabled=""'));
   let cursor = 0; const slots = [], calls = [];
-  const Form = loader({ react: { useState(initial) { const i = cursor++; if (!(i in slots)) slots[i] = initial; return [slots[i], v => { slots[i] = v; }]; } } })("apps/web/src/features/rooms/RoomForm.tsx").default;
+  const Form = loader({ react: { useRef: () => ({ current: null }), useState(initial) { const i = cursor++; if (!(i in slots)) slots[i] = initial; return [slots[i], v => { slots[i] = v; }]; } } })("apps/web/src/features/rooms/RoomForm.tsx").default;
   const render = (mode) => { cursor = 0; return Form({ mode, loading: false, submit: (...args) => { calls.push(args); return Promise.resolve(); } }); };
   let tree = render("create");
   const pick = elements(tree).find(e => typeof e.type === "function" && e.props.value === "earth");
@@ -98,7 +98,9 @@ test("Proxy theme: mặc định earth, chỉ create chuyển theme; request sai
     assert.equal(response.headers.get("cache-control"), "no-store"); assert.equal(JSON.parse(calls.at(-1).body).themeId, "ink");
     response = await proxy(request({ nickname: "A" }), "ABC234");
     assert.equal(response.status, 200); assert.deepEqual(JSON.parse(calls.at(-1).body), { nickname: "A" });
-    assert.deepEqual(calls.at(-1).headers, { "Content-Type": "application/json" });
+    assert.equal(calls.at(-1).headers["Content-Type"], "application/json");
+    assert.equal(calls.at(-1).headers["x-request-id"], response.headers.get("x-request-id"));
+    assert.deepEqual(Object.keys(calls.at(-1).headers).sort(), ["Content-Type", "x-request-id"]);
     const count = calls.length;
     for (const themeId of [null, {}, [], "x", "https://example.com/a", "../ink"]) assert.equal((await proxy(request({ nickname: "A", themeId }))).status, 400);
     assert.equal((await proxy(request({ nickname: "A", themeId: "snow" }), "ABC234")).status, 400);

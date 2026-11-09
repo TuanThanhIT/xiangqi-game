@@ -1,0 +1,18 @@
+{
+  "normal": {
+    "height": 812,
+    "client": 812,
+    "document": 1140,
+    "width": 375,
+    "documentWidth": 375,
+    "scrollY": 0
+  },
+  "resumed": {
+    "height": 812,
+    "client": 812,
+    "document": 1146,
+    "width": 375,
+    "documentWidth": 375,
+    "scrollY": 0
+  }
+}

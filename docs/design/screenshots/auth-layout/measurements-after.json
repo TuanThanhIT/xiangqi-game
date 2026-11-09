@@ -1,0 +1,131 @@
+[
+  {
+    "width": 1366,
+    "height": 768,
+    "viewport": 768,
+    "document": 768,
+    "scrollY": 0,
+    "header": {
+      "top": 0,
+      "height": 72,
+      "bottom": 72,
+      "paddingTop": "8px",
+      "paddingBottom": "8px",
+      "minHeight": "72px",
+      "rowGap": "16px"
+    },
+    "main": {
+      "top": 72,
+      "height": 696,
+      "bottom": 768,
+      "paddingTop": "24px",
+      "paddingBottom": "24px",
+      "minHeight": "0px",
+      "rowGap": "normal"
+    },
+    "card": {
+      "top": 96,
+      "height": 588.09375,
+      "bottom": 684.09375,
+      "paddingTop": "32px",
+      "paddingBottom": "30px",
+      "minHeight": "auto",
+      "rowGap": "normal"
+    },
+    "shell": {
+      "top": 0,
+      "height": 768,
+      "bottom": 768,
+      "paddingTop": "0px",
+      "paddingBottom": "0px",
+      "minHeight": "768px",
+      "rowGap": "normal"
+    }
+  },
+  {
+    "width": 1440,
+    "height": 900,
+    "viewport": 900,
+    "document": 900,
+    "scrollY": 0,
+    "header": {
+      "top": 0,
+      "height": 72,
+      "bottom": 72,
+      "paddingTop": "8px",
+      "paddingBottom": "8px",
+      "minHeight": "72px",
+      "rowGap": "16px"
+    },
+    "main": {
+      "top": 72,
+      "height": 828,
+      "bottom": 900,
+      "paddingTop": "81px",
+      "paddingBottom": "40px",
+      "minHeight": "0px",
+      "rowGap": "normal"
+    },
+    "card": {
+      "top": 153,
+      "height": 588.09375,
+      "bottom": 741.09375,
+      "paddingTop": "32px",
+      "paddingBottom": "30px",
+      "minHeight": "auto",
+      "rowGap": "normal"
+    },
+    "shell": {
+      "top": 0,
+      "height": 900,
+      "bottom": 900,
+      "paddingTop": "0px",
+      "paddingBottom": "0px",
+      "minHeight": "900px",
+      "rowGap": "normal"
+    }
+  },
+  {
+    "width": 375,
+    "height": 812,
+    "viewport": 812,
+    "document": 812,
+    "scrollY": 0,
+    "header": {
+      "top": 0,
+      "height": 76,
+      "bottom": 76,
+      "paddingTop": "12px",
+      "paddingBottom": "12px",
+      "minHeight": "72px",
+      "rowGap": "10px"
+    },
+    "main": {
+      "top": 76,
+      "height": 736,
+      "bottom": 812,
+      "paddingTop": "36px",
+      "paddingBottom": "36px",
+      "minHeight": "0px",
+      "rowGap": "normal"
+    },
+    "card": {
+      "top": 112,
+      "height": 574.59375,
+      "bottom": 686.59375,
+      "paddingTop": "28px",
+      "paddingBottom": "28px",
+      "minHeight": "auto",
+      "rowGap": "normal"
+    },
+    "shell": {
+      "top": 0,
+      "height": 812,
+      "bottom": 812,
+      "paddingTop": "0px",
+      "paddingBottom": "0px",
+      "minHeight": "812px",
+      "rowGap": "normal"
+    }
+  }
+]

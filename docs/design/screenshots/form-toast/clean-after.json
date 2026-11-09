@@ -1,0 +1,191 @@
+[
+  {
+    "size": {
+      "width": 1366,
+      "height": 768
+    },
+    "name": "login",
+    "card": {
+      "x": 463,
+      "y": 96,
+      "width": 440,
+      "height": 431.09375
+    },
+    "button": {
+      "x": 500,
+      "y": 400,
+      "width": 366,
+      "height": 54.5
+    },
+    "document": 768,
+    "viewport": 768
+  },
+  {
+    "size": {
+      "width": 1366,
+      "height": 768
+    },
+    "name": "register",
+    "card": {
+      "x": 463,
+      "y": 96,
+      "width": 440,
+      "height": 526.09375
+    },
+    "button": {
+      "x": 500,
+      "y": 495,
+      "width": 366,
+      "height": 54.5
+    },
+    "document": 768,
+    "viewport": 768
+  },
+  {
+    "size": {
+      "width": 1366,
+      "height": 768
+    },
+    "name": "otp",
+    "card": {
+      "x": 463,
+      "y": 96,
+      "width": 440,
+      "height": 481.875
+    },
+    "button": {
+      "x": 500,
+      "y": 386.78125,
+      "width": 366,
+      "height": 54.5
+    },
+    "document": 768,
+    "viewport": 768
+  },
+  {
+    "size": {
+      "width": 1440,
+      "height": 900
+    },
+    "name": "login",
+    "card": {
+      "x": 500,
+      "y": 153,
+      "width": 440,
+      "height": 431.09375
+    },
+    "button": {
+      "x": 537,
+      "y": 457,
+      "width": 366,
+      "height": 54.5
+    },
+    "document": 900,
+    "viewport": 900
+  },
+  {
+    "size": {
+      "width": 1440,
+      "height": 900
+    },
+    "name": "register",
+    "card": {
+      "x": 500,
+      "y": 153,
+      "width": 440,
+      "height": 526.09375
+    },
+    "button": {
+      "x": 537,
+      "y": 552,
+      "width": 366,
+      "height": 54.5
+    },
+    "document": 900,
+    "viewport": 900
+  },
+  {
+    "size": {
+      "width": 1440,
+      "height": 900
+    },
+    "name": "otp",
+    "card": {
+      "x": 500,
+      "y": 153,
+      "width": 440,
+      "height": 481.875
+    },
+    "button": {
+      "x": 537,
+      "y": 443.78125,
+      "width": 366,
+      "height": 54.5
+    },
+    "document": 900,
+    "viewport": 900
+  },
+  {
+    "size": {
+      "width": 375,
+      "height": 812
+    },
+    "name": "login",
+    "card": {
+      "x": 16,
+      "y": 112,
+      "width": 343,
+      "height": 427.59375
+    },
+    "button": {
+      "x": 41,
+      "y": 410.5,
+      "width": 293,
+      "height": 54.5
+    },
+    "document": 812,
+    "viewport": 812
+  },
+  {
+    "size": {
+      "width": 375,
+      "height": 812
+    },
+    "name": "register",
+    "card": {
+      "x": 16,
+      "y": 112,
+      "width": 343,
+      "height": 522.59375
+    },
+    "button": {
+      "x": 41,
+      "y": 505.5,
+      "width": 293,
+      "height": 54.5
+    },
+    "document": 812,
+    "viewport": 812
+  },
+  {
+    "size": {
+      "width": 375,
+      "height": 812
+    },
+    "name": "otp",
+    "card": {
+      "x": 16,
+      "y": 112,
+      "width": 343,
+      "height": 478.375
+    },
+    "button": {
+      "x": 41,
+      "y": 397.28125,
+      "width": 293,
+      "height": 54.5
+    },
+    "document": 812,
+    "viewport": 812
+  }
+]

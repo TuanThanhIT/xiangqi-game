@@ -10,6 +10,14 @@
 - Sau mỗi nhiệm vụ, báo các thay đổi, lý do, kiểm tra đã chạy, giới hạn và kiến thức người dùng cần hiểu.
 - Không báo kiểm tra thành công nếu chưa thực sự chạy.
 - Trên máy Windows này, dùng `npm.cmd` thay cho `npm`.
+- Nếu có màn hình mới, chờ người dùng duyệt thiết kế trước khi triển khai UI.
+
+## Quy tắc kiểm thử và bàn giao
+
+- Mỗi tính năng hoặc thay đổi hành vi phải chạy test tự động phù hợp với phạm vi thay đổi.
+- Với lỗi đã sửa, chạy lại ca tái hiện để xác nhận bản sửa. Lỗi riêng của tính năng ưu tiên test hồi quy; bài học áp dụng cho nhiều tác vụ thì bổ sung quy tắc phòng tránh và cách kiểm tra vào AGENTS.md.
+- Khi một thao tác có nhiều bước bất đồng bộ, kiểm tra đủ điều kiện hoàn tất trước khi chuyển trạng thái; bổ sung test cho request xen giữa các bước, không chỉ trạng thái trước và sau toàn bộ thao tác.
+- Bàn giao ghi rõ branch, commit đang kiểm tra và thay đổi chưa commit; liệt kê lệnh test, số pass/fail/skip, lý do skip và cách tự thử. Dùng `npm.cmd` trên PowerShell; không lấy kết quả kiểm tra cũ thay cho kết quả của lượt hiện tại.
 
 ## Quy tắc kiến trúc
 

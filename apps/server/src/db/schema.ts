@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { check, index, integer, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { bigint, check, index, integer, jsonb, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 
 export const avatars = pgTable("avatars", {
   id: text("id").primaryKey(),
@@ -64,4 +64,52 @@ export const emailSends = pgTable("auth_email_sends", {
   check("email_sends_purpose", sql`${t.purpose} in ('email_verification', 'password_reset')`),
   check("email_sends_status", sql`${t.status} in ('sent', 'failed')`),
   index("email_sends_quota_idx").on(t.emailKey, t.attemptedAt),
+]);
+
+export const wallets = pgTable("wallets", {
+  accountId: uuid("account_id").primaryKey().references(() => accounts.id, {onDelete:"cascade"}),
+  availableGold: bigint("available_gold",{mode:"number"}).notNull().default(0),
+  heldGold: bigint("held_gold",{mode:"number"}).notNull().default(0),
+  version: integer("version").notNull().default(0),
+},t=>[
+  check("wallets_balances",sql`${t.availableGold} >= 0 and ${t.heldGold} >= 0 and ${t.availableGold} + ${t.heldGold} <= 9007199254740991`),
+  check("wallets_version",sql`${t.version} >= 0`),
+]);
+
+export const wagers = pgTable("wagers", {
+  matchId: uuid("match_id").primaryKey(),
+  roomCode: text("room_code").notNull(),
+  redAccountId: uuid("red_account_id").notNull().references(()=>wallets.accountId),
+  blackAccountId: uuid("black_account_id").notNull().references(()=>wallets.accountId),
+  stake: bigint("stake",{mode:"number"}).notNull(),
+  status: text("status").notNull(),
+  result: jsonb("result").$type<{status:"finished";winner:"red"|"black";loser:"red"|"black";reason:string}|{status:"draw"|"cancelled";reason:string}>(),
+  createdAt: timestamp("created_at",{withTimezone:true}).notNull().defaultNow(),
+  resultAt: timestamp("result_at",{withTimezone:true}),
+  settledAt: timestamp("settled_at",{withTimezone:true}),
+},t=>[
+  check("wagers_stake",sql`${t.stake} > 0 and ${t.stake} <= 9007199254740991`),
+  check("wagers_players",sql`${t.redAccountId} <> ${t.blackAccountId}`),
+  check("wagers_status",sql`${t.status} in ('held','result_pending','settled','refunded')`),
+  check("wagers_result_state",sql`(${t.status} = 'held' and ${t.result} is null and ${t.resultAt} is null and ${t.settledAt} is null) or (${t.status} = 'result_pending' and ${t.result} is not null and ${t.resultAt} is not null and ${t.settledAt} is null) or (${t.status} in ('settled','refunded') and ${t.result} is not null and ${t.resultAt} is not null and ${t.settledAt} is not null)`),
+  index("wagers_status_idx").on(t.status),
+]);
+
+export const walletEntries = pgTable("wallet_entries", {
+  accountId: uuid("account_id").notNull().references(()=>wallets.accountId,{onDelete:"cascade"}),
+  entryNo: integer("entry_no").notNull(),
+  operationKey: text("operation_key").notNull(),
+  reason: text("reason").notNull(),
+  matchId: uuid("match_id").references(()=>wagers.matchId),
+  availableDelta: bigint("available_delta",{mode:"number"}).notNull(),
+  heldDelta: bigint("held_delta",{mode:"number"}).notNull(),
+  availableAfter: bigint("available_after",{mode:"number"}).notNull(),
+  heldAfter: bigint("held_after",{mode:"number"}).notNull(),
+  createdAt: timestamp("created_at",{withTimezone:true}).notNull().defaultNow(),
+},t=>[
+  primaryKey({columns:[t.accountId,t.entryNo]}),
+  uniqueIndex("wallet_entries_operation_unique").on(t.accountId,t.operationKey),
+  check("wallet_entries_reason",sql`${t.reason} in ('starter_grant','bet_hold','bet_refund','bet_payout')`),
+  check("wallet_entries_balances",sql`${t.availableAfter} >= 0 and ${t.heldAfter} >= 0 and ${t.entryNo} > 0`),
+  check("wallet_entries_match",sql`(${t.reason} = 'starter_grant' and ${t.matchId} is null) or (${t.reason} <> 'starter_grant' and ${t.matchId} is not null)`),
 ]);

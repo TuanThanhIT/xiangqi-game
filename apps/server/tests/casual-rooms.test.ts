@@ -26,7 +26,22 @@ test("Casual ready: explicit toggle, concurrent requests start exactly once and 
   await Promise.all([Promise.resolve().then(()=>s.service.setReady(s.red.roomCode,"red",true)),Promise.resolve().then(()=>s.service.setReady(s.red.roomCode,"black",true))]);
   const game=s.service.publicGameState(s.red.roomCode).game;assert.equal(game?.revision,0);assert.equal(game?.sideToMove,"red");
   assert.throws(()=>s.service.setReady(s.red.roomCode,"black",false));assert.throws(()=>s.service.leaveCasual(s.red.roomCode,"red"));
-  assert.deepEqual(s.service.publicGameState(s.red.roomCode).game,game);assert.equal(s.tasks.size,0);
+  assert.deepEqual(s.service.publicGameState(s.red.roomCode).game,game);assert.equal(s.tasks.size,1);
+ }finally{s.service.onModuleDestroy();}
+});
+test("Casual reconnect: a replacement socket cannot reuse readiness before attachment",()=>{
+ const s=setup();try{
+  s.service.setReady(s.red.roomCode,"red",true);
+  const identity={roomCode:s.red.roomCode,seat:"red" as const};
+  s.service.claimSocket(identity,"replacement");
+  // Gateway awaits channel attachment here; the other player's HTTP request can run.
+  s.service.setReady(s.red.roomCode,"black",true);
+  assert.equal(s.service.publicGameState(s.red.roomCode).game,null);
+  assert.equal(s.service.markSocketAttached(identity,"replacement"),true);
+  assert.equal(s.service.publicState(s.red.roomCode).players.red.ready,false);
+  assert.equal(s.service.publicGameState(s.red.roomCode).game,null);
+  s.service.setReady(s.red.roomCode,"red",true);
+  assert.equal(s.service.publicGameState(s.red.roomCode).game?.revision,0);
  }finally{s.service.onModuleDestroy();}
 });
 test("Casual leave: guest clears both ready flags and revokes old token; host closes room",()=>{
@@ -46,6 +61,17 @@ test("Casual reconnect: holds seat 60 seconds, requires ready again, stale disco
   assert.equal(s.service.publicState(s.red.roomCode).players.red.ready,false);
   assert.equal(s.service.releaseSocket({roomCode:s.red.roomCode,seat:"red"},"red"),false);
   s.set(60001);s.flush();assert.ok(s.service.authenticate(s.red.roomCode,s.red.seatToken));
+ }finally{s.service.onModuleDestroy();}
+});
+test("Casual join: simultaneous guests claim only one seat without starting a game",async()=>{
+ const s=setup();try{
+  s.service.leaveCasual(s.red.roomCode,"black");
+  const results=await Promise.allSettled(["black","third"].map(id=>Promise.resolve().then(()=>s.service.joinCasual(s.red.roomCode,profile(id)))));
+  assert.equal(results.filter(result=>result.status==="fulfilled").length,1);
+  const rejected=results.find(result=>result.status==="rejected");
+  assert.equal(rejected?.status==="rejected" ? rejected.reason.getResponse().code : null,"ROOM_FULL");
+  assert.equal(s.service.publicState(s.red.roomCode).players.black?.nickname,"black");
+  assert.equal(s.service.publicGameState(s.red.roomCode).game,null);
  }finally{s.service.onModuleDestroy();}
 });
 test("Casual timeout: guest frees seat; exact host expiry closes room even before timer runs",()=>{

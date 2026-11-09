@@ -1,9 +1,11 @@
 import type { RoomGame } from "./room-game";
 import type { CachedAction } from "./action-cache";
 import type { RoomThemeId } from "./room-theme";
-export interface RoomSeat { nickname: string; token: string; activeSocketId: string | null; attached: boolean; presence: boolean; requests: Map<string, CachedAction>; offlineDeadline: number | null; accountId?: string; avatar?: string | null; ready?: boolean }
-export interface Room { code: string; readonly themeId: RoomThemeId; red: RoomSeat; black: RoomSeat | null; game: RoomGame | null; cancelTimer: (() => void) | null; timerVersion: number }
-export interface PublicGameState { roomCode: string; game: RoomGame | null; playEnabled: boolean; serverNow: number; deadlines: { red: number | null; black: number | null } }
+import type { GameClock, PublicClock } from "./game-clock";
+export interface RoomSeat { nickname: string; token: string; activeSocketId: string | null; attached: boolean; presence: boolean; requests: Map<string, CachedAction>; offlineDeadline: number | null; accountId?: string; avatar?: string | null; ready?: boolean; connectedAt?: number }
+export interface RoomBet { stake:number; matchId:string|null; status:"none"|"held"|"result_pending"|"settled"|"refunded"; starting:boolean; pending:boolean }
+export interface Room { code: string; readonly themeId: RoomThemeId; red: RoomSeat; black: RoomSeat | null; game: RoomGame | null; cancelTimer: (() => void) | null; timerVersion: number; totalMinutes?: number; gameClock?: GameClock; stake?:number; matchId?:string; betStatus?:RoomBet["status"]; starting?:Promise<void>; cleanupPending?:boolean; settlementFlight?:Promise<void> }
+export interface PublicGameState { roomCode: string; game: RoomGame | null; playEnabled: boolean; serverNow: number; deadlines: { red: number | null; black: number | null }; clock?: PublicClock; bet?:RoomBet }
 export interface SeatResponse {
   roomCode: string;
   seat: "red" | "black";
@@ -19,4 +21,6 @@ export interface PublicRoomState {
   themeId: RoomThemeId;
   casual?: true;
   players: { red: PublicPlayer; black: PublicPlayer | null };
+  timeControl?: { totalMs: number; turnMs: number };
+  bet?:RoomBet;
 }

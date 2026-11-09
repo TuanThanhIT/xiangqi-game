@@ -1,6 +1,18 @@
 import { ArgumentsHost, Catch, ExceptionFilter, HttpException } from "@nestjs/common";
 
 const errors: Record<string, { status: number; message: string }> = {
+  INVALID_BET: {status:400,message:"Mức cược phải là số vàng nguyên không âm."},
+  INSUFFICIENT_GOLD: {status:409,message:"Chưa đủ vàng khả dụng để đặt cược. Vui lòng kiểm tra ví và sẵn sàng lại."},
+  INVALID_WALLET_QUERY: {status:400,message:"Tham số xem lịch sử ví không hợp lệ."},
+  WALLET_NOT_FOUND: {status:404,message:"Chưa có ví vàng cho tài khoản này."},
+  WALLET_LIMIT: {status:400,message:"Biến động vượt giới hạn số dư ví."},
+  BET_NOT_FOUND: {status:404,message:"Không tìm thấy thông tin cược."},
+  ROOM_STARTING: {status:409,message:"Phòng đang xử lý bắt đầu trận. Vui lòng chờ."},
+  ROOM_START_ABORTED: {status:409,message:"Chưa thể bắt đầu do trạng thái kết nối thay đổi. Vui lòng sẵn sàng lại."},
+  NOT_ROOM_OWNER: {status:403,message:"Chỉ chủ phòng được đổi cấu hình."},
+  NOT_ROOM_MEMBER: {status:403,message:"Bạn không thuộc phòng này."},
+  PLAYERS_READY: {status:409,message:"Cả hai cần bỏ sẵn sàng trước khi đổi cấu hình."},
+  GAME_ALREADY_STARTED: {status:409,message:"Trận đã bắt đầu, không thể đổi cấu hình phòng chờ."},
   INVALID_REGISTRATION_INPUT: { status: 400, message: "Kiểm tra email, mật khẩu và biệt danh." },
   INVALID_NICKNAME: { status: 400, message: "Biệt danh cần từ 1 đến 30 ký tự." },
   EMAIL_IN_USE: { status: 409, message: "Email đã có tài khoản. Vui lòng đăng nhập." },

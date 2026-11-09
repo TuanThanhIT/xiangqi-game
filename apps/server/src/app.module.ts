@@ -5,7 +5,8 @@ import { RoomsModule } from "./rooms/rooms.module";
 import { HttpErrorFilter } from "./http-error.filter";
 import { DatabaseModule } from "./db/database.module";
 import { AuthModule } from "./auth/auth.module";
+import { WalletModule } from "./wallet/wallet.module";
 
-@Module({ imports: [RoomsModule, DatabaseModule, AuthModule], controllers: [HealthController],
+@Module({ imports: [RoomsModule, DatabaseModule, AuthModule, WalletModule], controllers: [HealthController],
   providers: [{ provide: APP_FILTER, useClass: HttpErrorFilter }] })
 export class AppModule {}

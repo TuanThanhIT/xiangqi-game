@@ -3,7 +3,7 @@ import type { GameStatus, LegalMove, Piece, Side } from "@xiangqi/rules";
 
 // Đầu hàng là sự kiện trận online, không phải kết quả suy ra từ vị trí quân.
 export type OnlineGameResult = GameStatus |
-  { status: "finished"; winner: Side; loser: Side; reason: "resignation" | "disconnect_timeout" } |
+  { status: "finished"; winner: Side; loser: Side; reason: "resignation" | "disconnect_timeout" | "total_timeout" | "turn_timeout" } |
   { status: "cancelled"; reason: "both_disconnected" };
 
 export interface RoomGame {

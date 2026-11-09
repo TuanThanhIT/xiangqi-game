@@ -16,7 +16,8 @@
     "test:auth": "npm.cmd run build && node scripts/test-auth.cjs",
     "otp:local": "ts-node src/auth/otp/delivery/otp-local.ts",
     "test:registration": "npm.cmd run build && node scripts/test-registration.cjs",
-    "smtp:check": "ts-node src/auth/otp/delivery/smtp-check.ts"
+    "smtp:check": "ts-node src/auth/otp/delivery/smtp-check.ts",
+    "test:wallet": "npm.cmd run build && node --test scripts/test-wallet.cjs"
   },
   "dependencies": {
     "@nestjs/common": "12.3.2",

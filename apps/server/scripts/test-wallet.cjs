@@ -193,6 +193,21 @@ test("Wallet/bets: isolated PostgreSQL, real HTTP/Auth/Socket.IO",{timeout:90000
    await resign(f);await balances(f.red,80,0);await balances(f.black,120,0);assert.equal((await betting.get(id)).status,"settled");
    assert.equal((await settled).game.result.reason,"resignation");
   });
+  await t.test("match draw agreement over real Socket.IO refunds held gold exactly once",async()=>{
+   const f=await roomPair(20);await ready(f,f.red);await ready(f,f.black);
+   const snap=async socket=>(await socket.timeout(4000).emitWithAck("match:snapshot",{})).snapshot;
+   const initial=await snap(f.sr);assert.equal(initial.matchId,f.room.matchId);
+   const offer={matchId:initial.matchId,requestId:randomUUID(),expectedVersion:initial.stateVersion};
+   const offered=await f.sr.timeout(4000).emitWithAck("match:draw:offer",offer);assert.equal(offered.ok,true);
+   assert.deepEqual(await f.sr.timeout(4000).emitWithAck("match:draw:offer",offer),offered);
+   const accept={matchId:initial.matchId,requestId:randomUUID(),expectedVersion:(await snap(f.sb)).stateVersion,offerId:offer.requestId};
+   assert.equal((await f.sb.timeout(4000).emitWithAck("match:draw:accept",accept)).ok,true);
+   await durableDone(f.room);assert.equal((await betting.get(initial.matchId)).status,"refunded");
+   assert.deepEqual((await betting.get(initial.matchId)).result,{status:"draw",reason:"agreement"});
+   await balances(f.red,100,0);await balances(f.black,100,0);
+   const retry=await f.sb.timeout(4000).emitWithAck("match:draw:accept",accept);assert.equal(retry.code,"match_not_active");
+   assert.equal((await wallet.history(f.red.id)).items.length,3);assert.equal((await snap(f.sr)).status,"finished");
+  });
   await t.test("lost hold commit response refunds once instead of starting an unconfirmed game",async()=>{
    const f=await roomPair(20),original=betting.hold;
    betting.hold=async(...args)=>{await original.apply(betting,args);throw new Error("Lost commit response");};

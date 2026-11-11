@@ -17,6 +17,7 @@ export function isLegalMove(
   // Tái sử dụng kiểm tra số Tướng của isInCheck trước mọi nhánh trả false.
   // Kết quả chiếu hiện tại không quyết định nước đi; thế sau mô phỏng mới quyết định.
   isInCheck(pieces, sideToMove);
+  if (!destination || !Number.isInteger(destination.row) || !Number.isInteger(destination.col)) return false;
 
   const moving = pieces.find((piece) => piece.id === pieceId);
   if (!moving || moving.side !== sideToMove) return false;

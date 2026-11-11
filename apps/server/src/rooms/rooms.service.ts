@@ -3,7 +3,9 @@ import { randomBytes, randomInt, randomUUID, timingSafeEqual } from "node:crypto
 import { EventEmitter } from "node:events";
 import type { Room, SeatResponse, SeatIdentity, PublicRoomState, PublicPlayer } from "./rooms.types";
 import type { PublicGameState } from "./rooms.types";
-import { isLegalMove } from "@xiangqi/rules";
+import { isLegalMove, isInCheck } from "@xiangqi/rules";
+import { createMatchSession, expireDraw, closeDraw, offerDraw, respondDraw, parseMatchRequest } from "./match-engine";
+import type { MatchAction, MatchAck, MatchSnapshot } from "./match-engine";
 import { createRoomGame, nextRoomGame, resignRoomGame } from "./room-game";
 import { moveFailure, parseMoveRequest, sameMove } from "./move-request";
 import type { MoveAck } from "./move-request";
@@ -51,7 +53,8 @@ export class RoomsService implements OnModuleDestroy {
     if (this.closed || (room.game?.result.status !== "playing" && !(room.red.accountId && !room.game))) return;
     // Chỉ đặt lịch cho deadline tương lai; không lặp lại timer của người đã quá hạn.
     const future = [room.red.offlineDeadline, room.black?.offlineDeadline,
-      room.gameClock && room.game?.result.status === "playing" ? clockDeadline(room.gameClock).at : null]
+      room.gameClock && room.game?.result.status === "playing" ? clockDeadline(room.gameClock).at : null,
+      room.match?.offer?.status === "pending" ? room.match.offer.expiresAt : null]
       .filter((d): d is number => typeof d === "number" && d > now);
     if (!future.length) return;
     const version = room.timerVersion;
@@ -98,9 +101,11 @@ export class RoomsService implements OnModuleDestroy {
     if (result) {
       room.game = { ...room.game, result, revision: room.game.revision + 1 };
       this.stopGameClock(room, resolvedAt);
+      if (room.match) closeDraw(room.match);
     }
+    const drawExpired = !result && room.match ? expireDraw(room.match, now) : false;
     this.scheduleRoom(room, now);
-    return result !== null;
+    return result !== null || drawExpired;
   }
   private stopGameClock(room: Room, at: number): void {
     if (room.gameClock && room.gameClock.stoppedAt === null) room.gameClock.stoppedAt = at;
@@ -229,6 +234,11 @@ export class RoomsService implements OnModuleDestroy {
     room.game=createRoomGame();this.clearTimer(room);
     room.red.offlineDeadline=null;room.black!.offlineDeadline=null;
     const now=this.clock.now();room.gameClock=startGameClock((room.totalMinutes??15)*60_000,now);
+    room.gameMatchId ??= randomUUID();
+    room.match=createMatchSession(room.gameMatchId,now,{
+      red:room.itemsEnabled?[...(room.red.loadout??[])]:[],
+      black:room.itemsEnabled?[...(room.black!.loadout??[])]:[],
+    });
     this.scheduleRoom(room,now);
   }
   private async startPreparedGame(room:Room,matchId:string):Promise<void> {
@@ -327,7 +337,7 @@ export class RoomsService implements OnModuleDestroy {
     const {room,side} = membership;
     if(room.cleanupPending)throw new ConflictException({code:"ROOM_STARTING"});
     if(room.starting){if(ready)return room.starting;throw new ConflictException({code:"ROOM_STARTING"});}
-    if(room.game&&ready&&room.matchId)return;
+    if(room.game&&ready&&room.gameMatchId)return;
     if (room.game) throw new ConflictException({code:"GAME_ALREADY_STARTED"});
     if (!this.online(room[side]) || !room[side]!.attached) throw new ConflictException({code:"ROOM_OFFLINE"});
     room[side]!.ready = ready;
@@ -452,6 +462,7 @@ export class RoomsService implements OnModuleDestroy {
 
   notifyChange(code: string): void {
     const room=this.rooms.get(code);
+    if (room?.match && room.game?.result.status !== "playing") closeDraw(room.match);
     if(room?.game&&room.game.result.status!=="playing"&&room.matchId&&room.stake&&room.betStatus!=="settled"&&room.betStatus!=="refunded") {
       this.kickSettlement(room);
     }
@@ -490,7 +501,7 @@ export class RoomsService implements OnModuleDestroy {
   }
 
   // Đồng bộ trong một process: không await từ kiểm tra quyền tới ghi bàn/cache.
-  move(identity: SeatIdentity, socketId: string, payload: unknown): MoveAck {
+  move(identity: SeatIdentity, socketId: string, payload: unknown, expectedMatchVersion?: number): MoveAck {
     const room = this.rooms.get(identity.roomCode);
     const player = room?.[identity.seat];
     if (!room || !player || !this.ownsSocket(identity, socketId) || !player.attached) {
@@ -499,6 +510,7 @@ export class RoomsService implements OnModuleDestroy {
     if (this.evaluateDeadlines(room, this.clock.now())) this.notifyChange(room.code);
     const request = parseMoveRequest(payload);
     if (!request) return moveFailure("INVALID_MOVE_REQUEST", null);
+    if (room.match?.requests.has(`${identity.seat}:${request.requestId}`)) return moveFailure("REQUEST_ID_CONFLICT",request.requestId,room.game?.revision);
     const cached = player.requests.get(request.requestId);
     if (cached) return structuredClone(cached.kind === "move" && sameMove(cached.request, request) ? cached.ack :
       moveFailure("REQUEST_ID_CONFLICT", request.requestId, room.game?.revision));
@@ -511,6 +523,7 @@ export class RoomsService implements OnModuleDestroy {
       else if (!room.red.attached || !room.red.activeSocketId || !room.black?.attached || !room.black.activeSocketId) {
         ack = moveFailure("PLAYERS_OFFLINE", request.requestId, game.revision);
       } else if (request.expectedRevision !== game.revision) ack = moveFailure("STALE_REVISION", request.requestId, game.revision);
+      else if (this.isStaleMatchVersion(room, expectedMatchVersion)) ack = moveFailure("STALE_REVISION", request.requestId, game.revision);
       else if (identity.seat !== game.sideToMove) ack = moveFailure("NOT_YOUR_TURN", request.requestId, game.revision);
       else if (!isLegalMove(game.pieces, identity.seat, request.pieceId, request.to)) {
         ack = moveFailure("ILLEGAL_MOVE", request.requestId, game.revision);
@@ -518,10 +531,15 @@ export class RoomsService implements OnModuleDestroy {
         next = nextRoomGame(game, request.pieceId, request.to);
         // Acceptance is after legality/result computation, not the browser's timestamp.
         const acceptedAt = this.clock.now();
-        if (this.evaluateDeadlines(room, acceptedAt)) {
+        this.evaluateDeadlines(room, acceptedAt);
+        if (room.game!.result.status !== "playing") {
           next = undefined;
           this.notifyChange(room.code);
           ack = moveFailure("GAME_FINISHED", request.requestId, room.game!.revision);
+        } else if (this.isStaleMatchVersion(room, expectedMatchVersion)) {
+          next = undefined;
+          this.notifyChange(room.code);
+          ack = moveFailure("STALE_REVISION", request.requestId, room.game!.revision);
         } else {
           if (room.gameClock) {
             if (next.result.status === "playing") room.gameClock = nextClockTurn(room.gameClock, next.sideToMove, acceptedAt);
@@ -531,7 +549,7 @@ export class RoomsService implements OnModuleDestroy {
         }
       }
     } catch { ack = moveFailure("INTERNAL_ERROR", request.requestId, game?.revision); }
-    const entries = rememberAction(player.requests, { kind: "move", request, ack });
+    const entries = rememberAction(player.requests, { kind: "move", request, ack }, !!room.red.accountId);
     // Chuẩn bị mọi dữ liệu trước khi ghi, không để lại bàn dở dang khi tính luật lỗi.
     if (next) room.game = next;
     player.requests = entries;
@@ -540,8 +558,86 @@ export class RoomsService implements OnModuleDestroy {
     return ack;
   }
 
+  private matchVersion(room: Room): number { return room.game!.revision + room.match!.drawRevision; }
+  // Expiry cầu hòa có thể đổi version trong khi xử lý dù chưa có request khác.
+  private isStaleMatchVersion(room: Room, expectedVersion?: number): boolean {
+    return expectedVersion !== undefined && (!room.match || expectedVersion !== this.matchVersion(room));
+  }
+
+  // Snapshot riêng: chỉ socket đang giữ ghế đã xác thực được đọc.
+  matchSnapshot(identity: SeatIdentity, socketId: string): MatchSnapshot | null {
+    const room=this.rooms.get(identity.roomCode), player=room?.[identity.seat];
+    if (!room?.match || !room.game || !room.gameClock || !player?.accountId || !player.attached || !this.ownsSocket(identity,socketId)) return null;
+    if (this.evaluateDeadlines(room,this.clock.now())) this.notifyChange(room.code);
+    const game=room.game, match=room.match, result=game.result;
+    const pending=result.status!=="playing" && !!room.stake && room.betStatus!=="settled" && room.betStatus!=="refunded";
+    return structuredClone({matchId:match.id,roomCode:room.code,viewerSide:identity.seat,
+      players:{red:{nickname:room.red.nickname},black:{nickname:room.black!.nickname}},
+      board:game.pieces,sideToMove:game.sideToMove,moveNumber:game.moveNumber??0,
+      stateVersion:this.matchVersion(room),captured:game.captured??[],startedAt:match.startedAt,serverNow:this.clock.now(),
+      clock:publicClock(room.gameClock,this.clock.now()),inCheck:isInCheck(game.pieces,game.sideToMove),
+      status:result.status==="playing"?"active":pending?"result_pending":result.status==="cancelled"?"cancelled":"finished",
+      result:result.status==="playing"?null:result,reason:result.status==="playing"?null:result.reason,
+      drawOffer:match.offer,drawCounts:match.counts,
+      ownDrawAvailableAt:match.lastOfferAt[identity.seat]===null?null:match.lastOfferAt[identity.seat]!+60_000,
+      ownLoadout:match.loadouts[identity.seat]});
+  }
+
+  // Không await: kiểm tra, quyết định và cache nguyên tử trong backend duy nhất.
+  matchAction(identity: SeatIdentity, socketId: string, action: MatchAction, payload: unknown): MatchAck {
+    const room=this.rooms.get(identity.roomCode), player=room?.[identity.seat];
+    const fail=(code:string,requestId:string|null=null):MatchAck=>({ok:false,requestId,code,
+      ...(room?.match&&room.game?{currentVersion:this.matchVersion(room)}:{})});
+    if (!room || !player?.accountId || !player.attached || !this.ownsSocket(identity,socketId)) return fail("socket_not_active");
+    if (this.evaluateDeadlines(room,this.clock.now())) this.notifyChange(room.code);
+    const request=parseMatchRequest(payload,action);
+    if (!request) return fail("invalid_match_request");
+    if (!room.match || !room.game || request.matchId!==room.match.id) return fail("match_not_found",request.requestId);
+    const match=room.match, key=`${identity.seat}:${request.requestId}`;
+    const fingerprint=JSON.stringify({action,...request});
+    const cached=match.requests.get(key);
+    if (cached && cached.fingerprint!==fingerprint) return fail("request_id_conflict",request.requestId);
+    // Response cầu hòa đến sau kết thúc phải bị từ chối, kể cả retry.
+    if ((action==="draw_accept" || action==="draw_reject") && room.game.result.status!=="playing") return fail("match_not_active",request.requestId);
+    if (cached) return structuredClone(cached.ack);
+    // Không cho tái sử dụng key đã gửi qua giao thức V1.
+    if (player.requests.has(request.requestId)) return fail("request_id_conflict",request.requestId);
+    let ack:MatchAck;
+    if (room.game.result.status!=="playing") ack=fail("match_not_active",request.requestId);
+    else if (request.expectedVersion!==this.matchVersion(room)) ack=fail("stale_version",request.requestId);
+    else if (action==="move") {
+      const piece=room.game.pieces.find(p=>p.position.row===request.from!.row&&p.position.col===request.from!.col);
+      const result=this.move(identity,socketId,{requestId:request.requestId,expectedRevision:room.game.revision,pieceId:piece?.id??"missing",to:request.to},request.expectedVersion);
+      ack=result.ok?{ok:true,requestId:request.requestId,stateVersion:this.matchVersion(room)}:
+        fail(result.code==="STALE_REVISION"?"stale_version":result.code.toLowerCase(),request.requestId);
+    } else if (action==="resign") {
+      const result=this.resign(identity,socketId,{requestId:request.requestId},request.expectedVersion);
+      ack=result.ok?{ok:true,requestId:request.requestId,stateVersion:this.matchVersion(room)}:
+        fail(result.code==="STALE_REVISION"?"stale_version":result.code.toLowerCase(),request.requestId);
+    } else {
+      const now=this.clock.now();
+      // Phân xử deadline ngay trước khi chấp nhận, kể cả khi kiểm tra payload tốn thời gian.
+      if (this.evaluateDeadlines(room,now)) this.notifyChange(room.code);
+      const error=room.game.result.status!=="playing"?"match_not_active":
+        request.expectedVersion!==this.matchVersion(room)?"stale_version":
+        action==="draw_offer"?offerDraw(match,identity.seat,request.requestId,now):
+        respondDraw(match,identity.seat,request.offerId!,action==="draw_accept");
+      if (error) ack=fail(error,request.requestId);
+      else {
+        if (action==="draw_accept") {
+          room.game={...room.game,revision:room.game.revision+1,result:{status:"draw",reason:"agreement"}};
+          this.stopGameClock(room,now);
+        }
+        ack={ok:true,requestId:request.requestId,stateVersion:this.matchVersion(room)};
+      }
+    }
+    match.requests.set(key,{fingerprint,ack:structuredClone(ack)});
+    if (ack.ok) { this.scheduleRoom(room,this.clock.now()); this.notifyChange(room.code); }
+    return ack;
+  }
+
   // Không kiểm tra lượt hoặc đối thủ online; không await giữa xác thực và commit.
-  resign(identity: SeatIdentity, socketId: string, payload: unknown): ResignAck {
+  resign(identity: SeatIdentity, socketId: string, payload: unknown, expectedMatchVersion?: number): ResignAck {
     const room = this.rooms.get(identity.roomCode);
     const player = room?.[identity.seat];
     if (!room || !player || !this.ownsSocket(identity, socketId) || !player.attached) {
@@ -550,22 +646,33 @@ export class RoomsService implements OnModuleDestroy {
     if (this.evaluateDeadlines(room, this.clock.now())) this.notifyChange(room.code);
     const request = parseResignRequest(payload);
     if (!request) return resignFailure("INVALID_RESIGN_REQUEST", null);
+    if (room.match?.requests.has(`${identity.seat}:${request.requestId}`)) return resignFailure("REQUEST_ID_CONFLICT",request.requestId,room.game?.revision);
     const cached = player.requests.get(request.requestId);
     if (cached) return structuredClone(cached.kind === "resign" ? cached.ack :
       resignFailure("REQUEST_ID_CONFLICT", request.requestId, room.game?.revision));
     const game = room.game;
     let ack: ResignAck;
     let next: ReturnType<typeof resignRoomGame> | undefined;
+    let acceptedAt: number | undefined;
     try {
       if (!game) ack = resignFailure("GAME_NOT_STARTED", request.requestId);
       else if (game.result.status !== "playing") ack = resignFailure("GAME_FINISHED", request.requestId, game.revision);
+      else if (this.isStaleMatchVersion(room, expectedMatchVersion)) ack = resignFailure("STALE_REVISION", request.requestId, game.revision);
       else {
         next = resignRoomGame(game, identity.seat);
-        ack = { ok: true, requestId: request.requestId, appliedRevision: next.revision };
+        acceptedAt = this.clock.now();
+        this.evaluateDeadlines(room, acceptedAt);
+        if (room.game!.result.status !== "playing") {
+          next = undefined; this.notifyChange(room.code);
+          ack = resignFailure("GAME_FINISHED",request.requestId,room.game!.revision);
+        } else if (this.isStaleMatchVersion(room, expectedMatchVersion)) {
+          next = undefined; this.notifyChange(room.code);
+          ack = resignFailure("STALE_REVISION",request.requestId,room.game!.revision);
+        } else ack = { ok: true, requestId: request.requestId, appliedRevision: next.revision };
       }
     } catch { ack = resignFailure("INTERNAL_ERROR", request.requestId, game?.revision); }
-    const entries = rememberAction(player.requests, { kind: "resign", request, ack });
-    if (next) { room.game = next; this.stopGameClock(room, this.clock.now()); }
+    const entries = rememberAction(player.requests, { kind: "resign", request, ack }, !!room.red.accountId);
+    if (next) { room.game = next; this.stopGameClock(room, acceptedAt!); }
     player.requests = entries;
     if (next) this.scheduleRoom(room, this.clock.now());
     if (next) this.notifyChange(identity.roomCode);

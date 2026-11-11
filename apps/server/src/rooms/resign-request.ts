@@ -4,6 +4,7 @@ export const resignErrors = {
   SOCKET_NOT_ACTIVE: "Socket không còn giữ ghế hoặc chưa sẵn sàng.",
   GAME_NOT_STARTED: "Trận chưa bắt đầu.",
   GAME_FINISHED: "Trận đã kết thúc.",
+  STALE_REVISION: "Trạng thái trận đã thay đổi.",
   REQUEST_ID_CONFLICT: "Request ID đã được dùng cho yêu cầu khác.",
   INTERNAL_ERROR: "Không thể xử lý đầu hàng.",
 };

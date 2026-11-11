@@ -1,4 +1,6 @@
 import type { RoomGame } from "./room-game";
+import type { MatchSession } from "./match-engine";
+export interface Room { match?: MatchSession }
 import type { CachedAction } from "./action-cache";
 import type { RoomThemeId } from "./room-theme";
 import type { GameClock, PublicClock } from "./game-clock";

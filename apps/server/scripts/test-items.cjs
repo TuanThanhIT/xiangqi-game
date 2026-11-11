@@ -113,7 +113,10 @@ test("shop, inventory and private pre-match loadouts",{timeout:90000},async t=>{
    const red=await createUser(),black=await createUser();const local=new RoomsService(()=>"NOITEM",{now:()=>1000,schedule:()=>()=>{}},betting,wallet,loadouts);
    const rs=local.createCasual(profile(red),"earth"),bs=local.joinCasual(rs.roomCode,profile(black));attach(local,rs,"red");attach(local,bs,"black");
    assert.throws(()=>local.setItemsEnabled(rs.roomCode,black.id,true));local.setItemsEnabled(rs.roomCode,red.id,true);await local.setReady(rs.roomCode,red.id,true);assert.throws(()=>local.setItemsEnabled(rs.roomCode,red.id,false));await local.setReady(rs.roomCode,red.id,false);local.setItemsEnabled(rs.roomCode,red.id,false);
-   await local.setReady(rs.roomCode,red.id,true);await local.setReady(rs.roomCode,black.id,true);const room=local.rooms.get(rs.roomCode);assert.ok(room.game);assert.equal(room.gameMatchId,undefined);assert.equal(local.publicState(rs.roomCode).itemsEnabled,false);await local.onModuleDestroy();
+   await local.setReady(rs.roomCode,red.id,true);await local.setReady(rs.roomCode,black.id,true);const room=local.rooms.get(rs.roomCode);assert.ok(room.game);assert.ok(room.gameMatchId);
+   assert.deepEqual(await loadouts.snapshotForAccount(room.gameMatchId,red.id),[]);assert.deepEqual(await loadouts.snapshotForAccount(room.gameMatchId,black.id),[]);
+   assert.deepEqual(local.matchSnapshot({roomCode:rs.roomCode,seat:"red"},"red").ownLoadout,[]);
+   assert.equal(local.publicState(rs.roomCode).itemsEnabled,false);await local.onModuleDestroy();
   });
  }finally{
   if(app)await app.close();if(pool)await pool.end();assert.match(testSchema,/^items_test_[0-9a-f]{32}$/);await admin.query(`DROP SCHEMA IF EXISTS "${testSchema}" CASCADE`);await admin.end();

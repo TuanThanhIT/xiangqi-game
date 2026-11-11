@@ -1,5 +1,6 @@
 import type { Piece, Side } from "./types";
 import { canPieceMoveByGeometry } from "./piece-movement";
+import { assertValidPosition } from "./validate-position";
 
 /**
  * Kiểm tra đe dọa theo hình học và hai Tướng đối mặt, không thay đổi đầu vào.
@@ -7,6 +8,7 @@ import { canPieceMoveByGeometry } from "./piece-movement";
  * Không đệ quy xét nước đi hợp lệ/an toàn của quân tấn công, không xác định kết thúc trận.
  */
 export function isInCheck(pieces: readonly Piece[], side: Side): boolean {
+  assertValidPosition(pieces, side);
   const blackGenerals = pieces.filter((piece) => piece.type === "general" && piece.side === "black");
   const redGenerals = pieces.filter((piece) => piece.type === "general" && piece.side === "red");
   if (blackGenerals.length !== 1 || redGenerals.length !== 1) {

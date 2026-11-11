@@ -10,6 +10,7 @@ import { moveFailure } from "./move-request";
 import type { MoveAck } from "./move-request";
 import { resignFailure } from "./resign-request";
 import type { ResignAck } from "./resign-request";
+import type { MatchAction, MatchAck } from "./match-engine";
 
 interface RoomSocketData { identity?: SeatIdentity }
 type RoomSocket = Socket<Record<string, never>, Record<string, (...args: unknown[]) => void>, Record<string, never>, RoomSocketData>;
@@ -74,6 +75,17 @@ export class RoomsGateway implements OnGatewayInit, OnGatewayConnection, OnGatew
     this.unsubscribe = this.rooms.onRoomChange((code) => {
       this.server.to(this.channel(code)).emit("room:state", this.rooms.publicState(code));
       this.server.to(this.channel(code)).emit("game:state", this.rooms.publicGameState(code));
+      // Không broadcast snapshot riêng vào room channel: mỗi ghế có loadout khác nhau.
+      for (const socket of this.server.sockets.values()) {
+        const identity = socket.data.identity as SeatIdentity | undefined;
+        if (identity?.roomCode !== code) continue;
+        const snapshot=this.rooms.matchSnapshot(identity,socket.id);
+        if (!snapshot) continue;
+        socket.emit("match:state",snapshot);
+        if (snapshot.inCheck && snapshot.status === "active") socket.emit("match:check",{matchId:snapshot.matchId,stateVersion:snapshot.stateVersion,side:snapshot.sideToMove});
+        if (snapshot.status !== "active") socket.emit("match:ended",snapshot);
+        if (snapshot.drawOffer) socket.emit("match:draw:state",{matchId:snapshot.matchId,stateVersion:snapshot.stateVersion,offer:snapshot.drawOffer});
+      }
     });
   }
 
@@ -134,4 +146,30 @@ export class RoomsGateway implements OnGatewayInit, OnGatewayConnection, OnGatew
   }
 
   private channel(code: string): string { return `room:${code}`; }
+
+  @SubscribeMessage("match:snapshot")
+  handleMatchSnapshot(@ConnectedSocket() socket: RoomSocket): unknown {
+    try {
+      if (!socket.connected || !socket.data.identity) return {ok:false,code:"socket_not_active"};
+      const snapshot=this.rooms.matchSnapshot(socket.data.identity,socket.id);
+      return snapshot?{ok:true,snapshot}:{ok:false,code:"match_not_found"};
+    } catch { return {ok:false,code:"internal_error"}; }
+  }
+
+  private matchAction(socket: RoomSocket, action: MatchAction, payload: unknown): MatchAck {
+    try {
+      if (!socket.connected || !socket.data.identity) return {ok:false,requestId:null,code:"socket_not_active"};
+      return this.rooms.matchAction(socket.data.identity,socket.id,action,payload);
+    } catch { return {ok:false,requestId:null,code:"internal_error"}; }
+  }
+  @SubscribeMessage("match:move")
+  handleMatchMove(@ConnectedSocket() socket: RoomSocket,@MessageBody() payload: unknown): MatchAck { return this.matchAction(socket,"move",payload); }
+  @SubscribeMessage("match:resign")
+  handleMatchResign(@ConnectedSocket() socket: RoomSocket,@MessageBody() payload: unknown): MatchAck { return this.matchAction(socket,"resign",payload); }
+  @SubscribeMessage("match:draw:offer")
+  handleDrawOffer(@ConnectedSocket() socket: RoomSocket,@MessageBody() payload: unknown): MatchAck { return this.matchAction(socket,"draw_offer",payload); }
+  @SubscribeMessage("match:draw:accept")
+  handleDrawAccept(@ConnectedSocket() socket: RoomSocket,@MessageBody() payload: unknown): MatchAck { return this.matchAction(socket,"draw_accept",payload); }
+  @SubscribeMessage("match:draw:reject")
+  handleDrawReject(@ConnectedSocket() socket: RoomSocket,@MessageBody() payload: unknown): MatchAck { return this.matchAction(socket,"draw_reject",payload); }
 }

@@ -13,3 +13,4 @@ export { isLegalMove } from "./legal-move";
 export { getLegalMoves } from "./legal-moves";
 export { getGameStatus } from "./game-status";
 export type { GameStatus } from "./game-status";
+export type { BoardEffect } from "./effects";

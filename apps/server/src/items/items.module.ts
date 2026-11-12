@@ -7,7 +7,8 @@ import { InventoryService } from "./inventory.service";
 import { ItemsController } from "./items.controller";
 import { LoadoutService } from "./loadout.service";
 import { ShopService } from "./shop.service";
+import { ItemUsageService } from "./item-usage.service";
 
 @Module({imports:[DatabaseModule,AuthModule,WalletModule],controllers:[ItemsController],
-  providers:[CatalogService,InventoryService,ShopService,LoadoutService],exports:[LoadoutService]})
+  providers:[CatalogService,InventoryService,ShopService,LoadoutService,ItemUsageService],exports:[LoadoutService,ItemUsageService]})
 export class ItemsModule {}

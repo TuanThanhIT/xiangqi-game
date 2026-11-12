@@ -23,6 +23,8 @@ import { BettingService, InsufficientGold } from "../wallet/betting.service";
 import { validGold, WalletService } from "../wallet/wallet.service";
 import type { RoomBet } from "./rooms.types";
 import { LoadoutService } from "../items/loadout.service";
+import { ItemUsageService, type UsageInput } from "../items/item-usage.service";
+import { afterItemMove, casualResult, ItemRejected, parseItemRequest, refundTimeSaver, simulateItem, type ItemPlan } from "../items/item-effects";
 
 // Token DI nội bộ, không lấy từ request hoặc biến môi trường.
 export const ROOM_CODE_GENERATOR = Symbol("ROOM_CODE_GENERATOR");
@@ -35,6 +37,9 @@ export function generateRoomCode(): string {
 export class RoomsService implements OnModuleDestroy {
   private readonly rooms = new Map<string, Room>();
   private readonly changes = new EventEmitter();
+  // Gameplay decisions cannot overtake a transaction with an unknown outcome.
+  // Presence can change while it runs; its absolute deadlines are adjudicated after reconciliation.
+  private readonly pendingItems = new Map<Room, {side: Side; requestId: string; fingerprint: string; promise: Promise<MatchAck>}>();
 
   private closed = false;
   private readonly retryRooms=new Set<Room>();
@@ -44,12 +49,14 @@ export class RoomsService implements OnModuleDestroy {
     @Optional() @Inject(ROOM_CLOCK) private readonly clock: RoomClock = systemRoomClock,
     @Optional() private readonly betting?:BettingService,
     @Optional() private readonly wallet?:WalletService,
-    @Optional() private readonly loadouts?:LoadoutService) {}
+    @Optional() private readonly loadouts?:LoadoutService,
+    @Optional() private readonly itemUsage?:ItemUsageService) {}
 
   private online(player: Room["red"] | null): boolean { return !!(player?.activeSocketId && player.presence); }
   private clearTimer(room: Room): void { room.timerVersion++; room.cancelTimer?.(); room.cancelTimer = null; }
   private scheduleRoom(room: Room, now: number): void {
     this.clearTimer(room);
+    if (this.pendingItems.has(room)) return;
     if (this.closed || (room.game?.result.status !== "playing" && !(room.red.accountId && !room.game))) return;
     // Chỉ đặt lịch cho deadline tương lai; không lặp lại timer của người đã quá hạn.
     const future = [room.red.offlineDeadline, room.black?.offlineDeadline,
@@ -66,6 +73,7 @@ export class RoomsService implements OnModuleDestroy {
     }, Math.min(...future) - now);
   }
   private evaluateDeadlines(room: Room, now: number): boolean {
+    if (this.pendingItems.has(room)) return false;
     if (room.red.accountId && !room.game) {
       for (const side of ["red", "black"] as const) {
         const player = room[side];
@@ -123,7 +131,7 @@ export class RoomsService implements OnModuleDestroy {
     this.closed=true;if(this.retryTimer)clearTimeout(this.retryTimer);
     for(const room of this.rooms.values())this.clearTimer(room);
     // Drain money writes before DatabaseService releases the process lock.
-    return Promise.allSettled([...this.walletWork]).then(()=>undefined);
+    return Promise.allSettled([...this.walletWork, ...[...this.pendingItems.values()].map(p => p.promise)]).then(()=>undefined);
   }
 
   create(nickname: string, themeId: RoomThemeId = "earth"): SeatResponse {
@@ -297,6 +305,15 @@ export class RoomsService implements OnModuleDestroy {
       pending:!!room.cleanupPending||!!room.game&&room.game.result.status!=="playing"&&!!room.stake&&status!=="settled"&&status!=="refunded"};
   }
   private notifyIfPresent(room:Room):void {if(this.rooms.get(room.code)===room)this.notifyChange(room.code);}
+  private async reconcileUnknownItem(input:UsageInput, original:unknown) {
+    for(;;){
+      try{return await this.itemUsage!.reconcile(input);}
+      catch{
+        if(this.closed)throw original;
+        await new Promise<void>(resolve=>{const timer=setTimeout(resolve,2000);timer.unref();});
+      }
+    }
+  }
   private scheduleRetry(room:Room):void {
     this.retryRooms.add(room);
     if(this.closed||this.retryTimer)return;
@@ -510,6 +527,8 @@ export class RoomsService implements OnModuleDestroy {
     if (this.evaluateDeadlines(room, this.clock.now())) this.notifyChange(room.code);
     const request = parseMoveRequest(payload);
     if (!request) return moveFailure("INVALID_MOVE_REQUEST", null);
+    const pending = this.pendingItems.get(room);
+    if (pending) return moveFailure(pending.side === identity.seat && pending.requestId === request.requestId ? "REQUEST_ID_CONFLICT" : "ACTION_PENDING", request.requestId, room.game?.revision);
     if (room.match?.requests.has(`${identity.seat}:${request.requestId}`)) return moveFailure("REQUEST_ID_CONFLICT",request.requestId,room.game?.revision);
     const cached = player.requests.get(request.requestId);
     if (cached) return structuredClone(cached.kind === "move" && sameMove(cached.request, request) ? cached.ack :
@@ -525,10 +544,14 @@ export class RoomsService implements OnModuleDestroy {
       } else if (request.expectedRevision !== game.revision) ack = moveFailure("STALE_REVISION", request.requestId, game.revision);
       else if (this.isStaleMatchVersion(room, expectedMatchVersion)) ack = moveFailure("STALE_REVISION", request.requestId, game.revision);
       else if (identity.seat !== game.sideToMove) ack = moveFailure("NOT_YOUR_TURN", request.requestId, game.revision);
-      else if (!isLegalMove(game.pieces, identity.seat, request.pieceId, request.to)) {
+      else if (!isLegalMove(game.pieces, identity.seat, request.pieceId, request.to, room.match?.items.effects)) {
         ack = moveFailure("ILLEGAL_MOVE", request.requestId, game.revision);
       } else {
-        next = nextRoomGame(game, request.pieceId, request.to);
+        next = nextRoomGame(game, request.pieceId, request.to, !!room.itemsEnabled);
+        const nextItems = room.match ? afterItemMove(room.match.items, next) : undefined;
+        if (room.itemsEnabled && room.match && nextItems && room.gameClock) {
+          next.result = casualResult(next, room.gameClock, nextItems, room.match.loadouts[next.sideToMove], this.clock.now());
+        }
         // Acceptance is after legality/result computation, not the browser's timestamp.
         const acceptedAt = this.clock.now();
         this.evaluateDeadlines(room, acceptedAt);
@@ -541,6 +564,8 @@ export class RoomsService implements OnModuleDestroy {
           this.notifyChange(room.code);
           ack = moveFailure("STALE_REVISION", request.requestId, room.game!.revision);
         } else {
+          if (room.gameClock && room.match) room.gameClock = refundTimeSaver(room.gameClock, room.match.items, identity.seat, acceptedAt);
+          if (room.match && nextItems) room.match.items = nextItems;
           if (room.gameClock) {
             if (next.result.status === "playing") room.gameClock = nextClockTurn(room.gameClock, next.sideToMove, acceptedAt);
             else this.stopGameClock(room, acceptedAt);
@@ -575,12 +600,76 @@ export class RoomsService implements OnModuleDestroy {
       players:{red:{nickname:room.red.nickname},black:{nickname:room.black!.nickname}},
       board:game.pieces,sideToMove:game.sideToMove,moveNumber:game.moveNumber??0,
       stateVersion:this.matchVersion(room),captured:game.captured??[],startedAt:match.startedAt,serverNow:this.clock.now(),
-      clock:publicClock(room.gameClock,this.clock.now()),inCheck:isInCheck(game.pieces,game.sideToMove),
+      clock:publicClock(room.gameClock,this.clock.now()),inCheck:isInCheck(game.pieces,game.sideToMove,match.items.effects),
       status:result.status==="playing"?"active":pending?"result_pending":result.status==="cancelled"?"cancelled":"finished",
       result:result.status==="playing"?null:result,reason:result.status==="playing"?null:result.reason,
       drawOffer:match.offer,drawCounts:match.counts,
       ownDrawAvailableAt:match.lastOfferAt[identity.seat]===null?null:match.lastOfferAt[identity.seat]!+60_000,
-      ownLoadout:match.loadouts[identity.seat]});
+      ownLoadout:match.loadouts[identity.seat].filter(code => !match.items.used[identity.seat].includes(code as never)),
+      turnSequence:match.items.turnSequence,
+      activeEffects:match.items.effects.map(({ownerAccountId,...effect})=>effect),
+      usedItems:match.items.history,ownUsedItems:match.items.used[identity.seat],
+      ownScout:match.items.scouts[identity.seat]??null,
+      ownPendingItem:this.pendingItems.get(room)?.side===identity.seat?{requestId:this.pendingItems.get(room)!.requestId,status:"pending" as const}:null});
+  }
+
+  async useItem(identity: SeatIdentity, socketId: string, payload: unknown): Promise<MatchAck> {
+    const room=this.rooms.get(identity.roomCode),player=room?.[identity.seat];
+    const fail=(code:string,requestId:string|null=null):MatchAck=>({ok:false,requestId,code,
+      ...(room?.match&&room.game?{currentVersion:this.matchVersion(room)}:{})});
+    if(!room||!player?.accountId||!player.attached||!this.ownsSocket(identity,socketId))return fail("socket_not_active");
+    const request=parseItemRequest(payload);if(!request)return fail("invalid_item_request");
+    if(!room.match||!room.game||!room.gameClock||request.matchId!==room.match.id)return fail("match_not_found",request.requestId);
+    const match=room.match,key=`${identity.seat}:${request.requestId}`,fingerprint=JSON.stringify({action:"item_use",...request});
+    const cached=match.requests.get(key);
+    if(cached)return cached.fingerprint===fingerprint?structuredClone(cached.ack):fail("request_id_conflict",request.requestId);
+    if(player.requests.has(request.requestId))return fail("request_id_conflict",request.requestId);
+    const pending=this.pendingItems.get(room);
+    if(pending){
+      if(pending.side===identity.seat&&pending.requestId===request.requestId)
+        return pending.fingerprint===fingerprint?pending.promise:fail("request_id_conflict",request.requestId);
+      return fail("action_pending",request.requestId);
+    }
+    if(this.evaluateDeadlines(room,this.clock.now()))this.notifyChange(room.code);
+    let validationError:string|null=room.game.result.status!=="playing"?"match_not_active":
+      !room.itemsEnabled?"items_disabled":request.expectedVersion!==this.matchVersion(room)?"stale_version":
+      room.game.sideToMove!==identity.seat?"not_your_turn":
+      !match.loadouts[identity.seat].includes(request.itemCode)?"item_not_equipped":
+      match.items.used[identity.seat].includes(request.itemCode)?"item_already_used":
+      match.items.usedTurn===match.items.turnSequence?"item_already_used_this_turn":null;
+    if(validationError){const ack=fail(validationError,request.requestId);match.requests.set(key,{fingerprint,ack:structuredClone(ack)});return ack;}
+    const acceptedAt=this.clock.now();
+    if(acceptedAt>=clockDeadline(room.gameClock).at){this.evaluateDeadlines(room,acceptedAt);this.notifyChange(room.code);
+      const ack=fail("match_not_active",request.requestId);match.requests.set(key,{fingerprint,ack:structuredClone(ack)});return ack;}
+    let plan:ItemPlan;
+    try{plan=simulateItem(room.game,room.gameClock,match.items,identity.seat,player.accountId,request.itemCode,
+      request.targetPieceId,acceptedAt,this.matchVersion(room)+1);}
+    catch(error){const ack=fail(error instanceof ItemRejected?error.code:"internal_error",request.requestId);
+      match.requests.set(key,{fingerprint,ack:structuredClone(ack)});return ack;}
+    if(!this.itemUsage)return fail("internal_error",request.requestId);
+    const input:UsageInput={...request,accountId:player.accountId,fingerprint,acceptedAt,
+      result:{stateVersion:this.matchVersion(room)+1,...(plan.scout?{scout:plan.scout}:{})},
+      metadata:{turnSequence:match.items.turnSequence,effectCount:plan.items.effects.length}};
+    const task=(async():Promise<MatchAck>=>{
+      try{
+        try{await this.itemUsage!.consume(input);}catch(error){
+          if(error instanceof ItemRejected)throw error;
+          const durable=await this.reconcileUnknownItem(input,error);if(!durable)throw error;
+          if(durable.fingerprint!==fingerprint)throw new ItemRejected("request_id_conflict");
+        }
+        // The pending gate guarantees no gameplay state can change after acceptedAt.
+        room.game=plan.game;room.gameClock=plan.clock;match.items=plan.items;
+        const ack:MatchAck={ok:true,requestId:request.requestId,stateVersion:this.matchVersion(room),...(plan.scout?{scout:plan.scout}:{})};
+        match.requests.set(key,{fingerprint,ack:structuredClone(ack)});return ack;
+      }catch(error){const ack=fail(error instanceof ItemRejected?error.code:"internal_error",request.requestId);
+        match.requests.set(key,{fingerprint,ack:structuredClone(ack)});return ack;
+      }finally{
+        this.pendingItems.delete(room);this.evaluateDeadlines(room,this.clock.now());this.scheduleRoom(room,this.clock.now());this.notifyIfPresent(room);
+      }
+    })();
+    this.pendingItems.set(room,{side:identity.seat,requestId:request.requestId,fingerprint,promise:task});
+    this.clearTimer(room);
+    return task;
   }
 
   // Không await: kiểm tra, quyết định và cache nguyên tử trong backend duy nhất.
@@ -602,6 +691,8 @@ export class RoomsService implements OnModuleDestroy {
     if (cached) return structuredClone(cached.ack);
     // Không cho tái sử dụng key đã gửi qua giao thức V1.
     if (player.requests.has(request.requestId)) return fail("request_id_conflict",request.requestId);
+    const pending = this.pendingItems.get(room);
+    if (pending) return fail(pending.side === identity.seat && pending.requestId === request.requestId ? "request_id_conflict" : "action_pending", request.requestId);
     let ack:MatchAck;
     if (room.game.result.status!=="playing") ack=fail("match_not_active",request.requestId);
     else if (request.expectedVersion!==this.matchVersion(room)) ack=fail("stale_version",request.requestId);
@@ -646,6 +737,8 @@ export class RoomsService implements OnModuleDestroy {
     if (this.evaluateDeadlines(room, this.clock.now())) this.notifyChange(room.code);
     const request = parseResignRequest(payload);
     if (!request) return resignFailure("INVALID_RESIGN_REQUEST", null);
+    const pending = this.pendingItems.get(room);
+    if (pending) return resignFailure(pending.side === identity.seat && pending.requestId === request.requestId ? "REQUEST_ID_CONFLICT" : "ACTION_PENDING", request.requestId, room.game?.revision);
     if (room.match?.requests.has(`${identity.seat}:${request.requestId}`)) return resignFailure("REQUEST_ID_CONFLICT",request.requestId,room.game?.revision);
     const cached = player.requests.get(request.requestId);
     if (cached) return structuredClone(cached.kind === "resign" ? cached.ack :

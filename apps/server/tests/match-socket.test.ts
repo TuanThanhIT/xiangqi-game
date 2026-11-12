@@ -11,6 +11,7 @@ import type { JsonParserApplication } from "../src/configure-http";
 import { SessionService } from "../src/auth/session/session.service";
 import { RoomsService } from "../src/rooms/rooms.service";
 import { LoadoutService } from "../src/items/loadout.service";
+import { ItemUsageService } from "../src/items/item-usage.service";
 import type { RoomClock } from "../src/rooms/room-clock";
 import type { Room, SeatResponse } from "../src/rooms/rooms.types";
 import type { MatchAck, MatchSnapshot } from "../src/rooms/match-engine";
@@ -37,7 +38,9 @@ test("Match Socket.IO: snapshot riêng, move ack/conflict, draw events, expiry, 
    const id=authorization?.replace(/^Bearer /,"");if(!id||!["red","black"].includes(id))throw new UnauthorizedException();
    return {id,email:`${id}@example.test`,nickname:id,avatar:{id:"default",name:"Default",assetPath:null}};
   };
-  let snapshots=0;app.get(LoadoutService).snapshot=async()=>{snapshots++;};
+  let snapshots=0,consumes=0;app.get(LoadoutService).snapshot=async()=>{snapshots++;};
+  app.get(ItemUsageService).consume=async input=>{consumes++;return {fingerprint:input.fingerprint} as never;};
+  app.get(ItemUsageService).reconcile=async()=>undefined;
   configureHttp(app);await app.listen(0,"127.0.0.1");const base=await app.getUrl();
   const post=(path:string,id:string,body:object)=>fetch(base+path,{method:"POST",headers:{Origin:"http://localhost:3000",Authorization:`Bearer ${id}`,"Content-Type":"application/json"},body:JSON.stringify(body)});
   const red=await (await post("/casual-rooms","red",{themeId:"earth"})).json() as SeatResponse;
@@ -55,6 +58,15 @@ test("Match Socket.IO: snapshot riêng, move ack/conflict, draw events, expiry, 
   const snapshot=async(socket:Socket)=>(await emit<{ok:true;snapshot:MatchSnapshot}>(socket,"match:snapshot")).snapshot;
   assert.deepEqual((await snapshot(sb)).ownLoadout,["seal"]);assert.equal(JSON.stringify(start).includes("seal"),false);
   const request=async(extra:object={})=>({matchId:start.matchId,requestId:randomUUID(),expectedVersion:(await snapshot(sr)).stateVersion,...extra});
+  const item=await request({itemCode:"scout",targetPieceId:"black-soldier-0"});
+  const privateState=event<MatchSnapshot>(sr,"match:state",s=>s.ownScout?.targetPieceId==="black-soldier-0");
+  const publicState=event<MatchSnapshot>(sb,"match:state",s=>s.usedItems.some(i=>i.itemCode==="scout"));
+  const itemAck=await emit<MatchAck>(sr,"match:item:use",item);assert.equal(itemAck.ok,true);assert.ok(itemAck.ok&&itemAck.scout);
+  assert.deepEqual(await emit(sr,"match:item:use",item),itemAck);assert.equal(consumes,1);
+  const ownAfterItem=await privateState,opponentAfterItem=await publicState;
+  assert.equal(ownAfterItem.ownScout?.stale,false);assert.equal(opponentAfterItem.ownScout,null);
+  assert.equal(JSON.stringify(opponentAfterItem).includes("black-soldier-0"),true); // board is public
+  assert.equal(opponentAfterItem.usedItems.find(i=>i.itemCode==="scout")?.targetPieceId,undefined);
   const req=await request({from:{row:6,col:0},to:{row:5,col:0}});
   const updated=event<MatchSnapshot>(sb,"match:state",s=>s.moveNumber===1);
   const ack=await emit<MatchAck>(sr,"match:move",req);assert.equal(ack.ok,true);assert.equal((await updated).sideToMove,"black");

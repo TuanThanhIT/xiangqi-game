@@ -1,6 +1,7 @@
 import type { Piece, Side } from "./types";
 import { canPieceMoveByGeometry } from "./piece-movement";
 import { isInCheck } from "./check";
+import { hasEffect, type BoardEffect } from "./effects";
 
 /**
  * Hợp lệ theo luật đã hỗ trợ: đúng phe, hình học và không để Tướng mình bị chiếu.
@@ -13,19 +14,22 @@ export function isLegalMove(
   sideToMove: Side,
   pieceId: Piece["id"],
   destination: Readonly<{ row: number; col: number }>,
+  effects: readonly BoardEffect[] = [],
 ): boolean {
   // Tái sử dụng kiểm tra số Tướng của isInCheck trước mọi nhánh trả false.
   // Kết quả chiếu hiện tại không quyết định nước đi; thế sau mô phỏng mới quyết định.
-  isInCheck(pieces, sideToMove);
+  isInCheck(pieces, sideToMove, effects);
   if (!destination || !Number.isInteger(destination.row) || !Number.isInteger(destination.col)) return false;
 
   const moving = pieces.find((piece) => piece.id === pieceId);
   if (!moving || moving.side !== sideToMove) return false;
+  if (hasEffect(effects, pieceId, "seal")) return false;
   if (!canPieceMoveByGeometry(pieces, pieceId, destination)) return false;
 
   const target = pieces.find((piece) =>
     piece.position.row === destination.row && piece.position.col === destination.col);
   if (target?.type === "general") return false;
+  if (target && hasEffect(effects, target.id, "shield")) return false;
 
   // Hình học đã kiểm tra tọa độ nguyên và giới hạn Row/Col ở trên.
   const position: Piece["position"] = {
@@ -38,5 +42,5 @@ export function isLegalMove(
       ...piece,
       position: piece.id === pieceId ? { ...position } : { ...piece.position },
     }));
-  return !isInCheck(simulated, sideToMove);
+  return !isInCheck(simulated, sideToMove, effects);
 }

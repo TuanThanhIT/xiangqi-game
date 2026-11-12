@@ -172,4 +172,11 @@ export class RoomsGateway implements OnGatewayInit, OnGatewayConnection, OnGatew
   handleDrawAccept(@ConnectedSocket() socket: RoomSocket,@MessageBody() payload: unknown): MatchAck { return this.matchAction(socket,"draw_accept",payload); }
   @SubscribeMessage("match:draw:reject")
   handleDrawReject(@ConnectedSocket() socket: RoomSocket,@MessageBody() payload: unknown): MatchAck { return this.matchAction(socket,"draw_reject",payload); }
+  @SubscribeMessage("match:item:use")
+  async handleItemUse(@ConnectedSocket() socket: RoomSocket,@MessageBody() payload: unknown):Promise<MatchAck>{
+    try{
+      if(!socket.connected||!socket.data.identity)return {ok:false,requestId:null,code:"socket_not_active"};
+      return await this.rooms.useItem(socket.data.identity,socket.id,payload);
+    }catch{return {ok:false,requestId:null,code:"internal_error"};}
+  }
 }

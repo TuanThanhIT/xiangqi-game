@@ -44,5 +44,5 @@ export function publicClock(clock: GameClock, now: number): PublicClock {
     totalDeadlineAt: clock.turnStartedAt + clock.remainingMs[clock.activeSide], stoppedAt: clock.stoppedAt};
 }
 export function nextClockTurn(clock: GameClock, side: Side, now: number): GameClock {
-  return {...clock, remainingMs: publicClock(clock, now).remainingMs, activeSide: side, turnStartedAt: now};
+  return {...clock, remainingMs: publicClock(clock, now).remainingMs, activeSide: side, turnStartedAt: now, turnMs: TURN_MS};
 }

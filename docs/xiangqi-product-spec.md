@@ -54,6 +54,17 @@ Mỗi người chọn từ 0 đến 3 món khác loại từ kho trước trận
 
 Giá là cấu hình thử nghiệm. Khiên và Phong ấn độc lập, cùng tồn tại được và hết hạn theo lượt, kể cả sau khi tạm dừng do mất kết nối. Có thể dùng vật phẩm khi đang bị chiếu. Nếu Tướng vẫn bị chiếu sau một món được phép dùng, nước tiếp theo phải giải chiếu. Khi dùng thành công, cả hai thấy món, mục tiêu nếu có và hiệu ứng trên bàn. Khiên và Phong ấn có biểu tượng xem tác dụng và hạn. Hồi sinh thông báo quân trở lại. Trinh sát chỉ công khai việc đã dùng món, giữ riêng kết quả.
 
+Quyết định triển khai backend vật phẩm:
+
+- Vật phẩm hỗ trợ thời gian chỉ tác động đồng hồ người sử dụng; vật phẩm tấn công thời gian có thể tác động đối thủ theo đặc tả riêng. Thời áp trừ tối đa 15 giây quỹ tổng đối thủ nhưng luôn chừa 10 giây, không đổi giờ lượt và bị từ chối nếu đối thủ còn tối đa 10 giây.
+- Item action dùng `requestId` và `expectedVersion`; chỉ transaction thành công mới tiêu hao. Retry cùng payload không áp dụng hoặc tiêu hao lần hai. Mỗi loại trong snapshot loadout dùng tối đa một lần trong trận và mỗi lượt chỉ dùng một món.
+- Trinh sát dùng effects hiện tại, kết quả rỗng vẫn thành công. Đối thủ chỉ biết món đã dùng; mục tiêu và các đích là dữ liệu riêng, gắn với stateVersion và trở thành stale khi bàn/effects đổi.
+- Tiết kiệm thời gian nhận nước tại biên `<= 10.000 ms`, không vượt quỹ tổng ban đầu. Gia hạn cũng không vượt quỹ ban đầu và phải cộng được ít nhất 1 ms. Tĩnh tâm chỉ cộng 15 giây cho lượt hiện tại.
+- Khiên và Phong ấn có hiệu lực ngay, hết sau lượt kế tiếp của đối thủ, không cộng dồn hoặc làm mới. Phong ấn loại quân khỏi di chuyển, ăn, vùng tấn công, chiếu và bảo vệ nhưng quân vẫn cản đường vật lý. Hết ấn có thể tạo chiếu ở ranh giới lượt mà không hoàn tác nước vừa đi.
+- Quân bị ăn mất mọi effect. Hồi sinh dùng đúng `pieceId`, ô khai cuộc phải trống, Tướng phải an toàn ngay sau hồi sinh và quân trở lại không mang effect cũ.
+- Nếu không còn nước cờ, server mô phỏng từng món chưa dùng trong snapshot với từng mục tiêu. Chỉ khi không có một món tạo được ít nhất một nước hợp lệ mới xử thua do chiếu bí hoặc hết nước.
+- Đồng hồ không dừng trong lúc chờ transaction. Mốc chấp nhận là lần kiểm tra cuối trước transaction; action đã qua mốc này tiếp tục khi disconnect. Commit chưa rõ được đối soát theo requestId trước khi mở gameplay tiếp.
+
 ## 5. Vàng, cửa hàng và nhiệm vụ
 
 - Quà cấp một lần sau xác minh email gồm 100 vàng và một món mỗi loại trong bảng, tổng cộng 10 món.

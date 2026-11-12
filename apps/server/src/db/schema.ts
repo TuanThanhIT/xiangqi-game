@@ -161,6 +161,27 @@ export const matchLoadouts = pgTable("match_loadouts", {
   check("match_loadouts_slot", sql`${t.slot} between 1 and 3`),
 ]);
 
+export const itemUsages = pgTable("item_usages", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  matchId: uuid("match_id").notNull(),
+  accountId: uuid("account_id").notNull().references(() => accounts.id),
+  requestId: uuid("request_id").notNull(),
+  fingerprint: text("fingerprint").notNull(),
+  itemCode: text("item_code").notNull().references(() => shopItems.code),
+  targetPieceId: text("target_piece_id"),
+  status: text("status").notNull().default("committed"),
+  acceptedAt: timestamp("accepted_at", {withTimezone:true}).notNull(),
+  committedAt: timestamp("committed_at", {withTimezone:true}).notNull().defaultNow(),
+  result: jsonb("result").$type<Record<string, unknown>>().notNull(),
+  quantityConsumed: integer("quantity_consumed").notNull().default(1),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull(),
+  createdAt: timestamp("created_at", {withTimezone:true}).notNull().defaultNow(),
+}, t => [
+  uniqueIndex("item_usages_request_unique").on(t.matchId, t.accountId, t.requestId),
+  uniqueIndex("item_usages_loadout_unique").on(t.matchId, t.accountId, t.itemCode),
+  check("item_usages_committed", sql`${t.status} = 'committed' and ${t.quantityConsumed} = 1`),
+]);
+
 export const walletEntries = pgTable("wallet_entries", {
   accountId: uuid("account_id").notNull().references(()=>wallets.accountId,{onDelete:"cascade"}),
   entryNo: integer("entry_no").notNull(),

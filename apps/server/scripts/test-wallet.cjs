@@ -123,7 +123,9 @@ test("Wallet/bets: isolated PostgreSQL, real HTTP/Auth/Socket.IO",{timeout:90000
    await Promise.all(Array.from({length:3},()=>betting.hold(f.id,"ABC234",f.red.id,f.black.id,60)));
    await assert.rejects(()=>betting.hold(randomUUID(),"DEF234",f.red.id,f.black.id,60));
    await balances(f.red,40,60);assert.equal((await wallet.history(f.red.id)).items.length,2);
-   await Promise.all([betting.finish(f.id,win),betting.finish(f.id,win),betting.settle(f.id)]);
+   await assert.rejects(()=>betting.settle(f.id),error=>error?.getResponse?.().code==="BET_RESULT_MISSING");
+   await Promise.all([betting.recordResult(f.id,win),betting.recordResult(f.id,win)]);
+   await Promise.all([betting.finish(f.id,win),betting.settle(f.id),betting.settle(f.id)]);
    await balances(f.red,160,0);await balances(f.black,40,0);assert.equal((await wallet.history(f.red.id)).items.length,3);
    await assert.rejects(()=>betting.finish(f.id,{...win,winner:"black",loser:"red"}));
    await login(f.red);await login(old);

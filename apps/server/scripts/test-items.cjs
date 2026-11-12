@@ -19,6 +19,7 @@ const {CatalogService}=require("../dist/items/catalog.service.js");
 const {InventoryService}=require("../dist/items/inventory.service.js");
 const {ShopService}=require("../dist/items/shop.service.js");
 const {LoadoutService}=require("../dist/items/loadout.service.js");
+const {ItemUsageService}=require("../dist/items/item-usage.service.js");
 const {WalletService}=require("../dist/wallet/wallet.service.js");
 const {BettingService}=require("../dist/wallet/betting.service.js");
 const {RoomsService}=require("../dist/rooms/rooms.service.js");
@@ -37,9 +38,9 @@ test("shop, inventory and private pre-match loadouts",{timeout:90000},async t=>{
   const password="Items-test-password-2026",passwordHash=await hashPassword(password);
   async function createUser(verified=true){const id=randomUUID(),email=`items-${id}@example.test`;await db.insert(schema.accounts).values({id,email,nickname:`Player ${id}`,passwordHash,emailVerifiedAt:verified?new Date():null});return{id,email};}
   const old=await createUser(),pending=await createUser(false);
-  await migrate("0002_colorful_titanium_man.sql");await migrate("0003_thin_payback.sql");
+  await migrate("0002_colorful_titanium_man.sql");await migrate("0003_thin_payback.sql");await migrate("0004_shallow_blacklash.sql");
   app=await NestFactory.create(AppModule,{logger:false,abortOnError:false,bodyParser:false});app.get(DatabaseService).db=db;configureHttp(app);await app.listen(0,"127.0.0.1");
-  const catalog=app.get(CatalogService),inventory=app.get(InventoryService),shop=app.get(ShopService),wallet=app.get(WalletService),betting=app.get(BettingService),loadouts=app.get(LoadoutService),rooms=app.get(RoomsService);
+  const catalog=app.get(CatalogService),inventory=app.get(InventoryService),shop=app.get(ShopService),wallet=app.get(WalletService),betting=app.get(BettingService),loadouts=app.get(LoadoutService),usage=app.get(ItemUsageService),rooms=app.get(RoomsService);
   const base=await app.getUrl();
   async function request(path,token,body,method=body===undefined?"GET":"POST"){return fetch(base+path,{method,headers:{Origin:"http://localhost:3000",...(token?{Authorization:`Bearer ${token}`} : {}),"Content-Type":"application/json"},...(body===undefined?{}:{body:JSON.stringify(body)})});}
   async function login(user){const response=await request("/auth/login",null,{email:user.email,password});assert.equal(response.status,200);user.token=(await response.json()).accessToken;return user;}
@@ -117,6 +118,29 @@ test("shop, inventory and private pre-match loadouts",{timeout:90000},async t=>{
    assert.deepEqual(await loadouts.snapshotForAccount(room.gameMatchId,red.id),[]);assert.deepEqual(await loadouts.snapshotForAccount(room.gameMatchId,black.id),[]);
    assert.deepEqual(local.matchSnapshot({roomCode:rs.roomCode,seat:"red"},"red").ownLoadout,[]);
    assert.equal(local.publicState(rs.roomCode).itemsEnabled,false);await local.onModuleDestroy();
+  });
+  await t.test("item usage transaction consumes once, durable retry is stable and rollback preserves inventory",async()=>{
+   const red=await createUser(),black=await createUser();let now=1000;
+   const local=new RoomsService(()=>"USE234",{now:()=>now,schedule:()=>()=>{}},betting,wallet,loadouts,usage);
+   const rs=local.createCasual(profile(red),"earth"),bs=local.joinCasual(rs.roomCode,profile(black));attach(local,rs,"red");attach(local,bs,"black");
+   local.setItemsEnabled(rs.roomCode,red.id,true);await local.setLoadout(rs.roomCode,red.id,["scout","time_pressure"]);await local.setLoadout(rs.roomCode,black.id,[]);
+   await Promise.all([local.setReady(rs.roomCode,red.id,true),local.setReady(rs.roomCode,black.id,true)]);
+   const state=()=>local.matchSnapshot({roomCode:rs.roomCode,seat:"red"},"red");
+   const request={matchId:state().matchId,requestId:randomUUID(),expectedVersion:state().stateVersion,itemCode:"scout",targetPieceId:"black-soldier-0"};
+   const results=await Promise.all([local.useItem({roomCode:rs.roomCode,seat:"red"},"red",request),local.useItem({roomCode:rs.roomCode,seat:"red"},"red",request)]);
+   assert.deepEqual(results[0],results[1]);assert.equal(results[0].ok,true);assert.equal((await quantities(red.id)).get("scout"),0);
+   assert.equal((await db.select().from(schema.itemUsages).where(eq(schema.itemUsages.accountId,red.id))).length,1);
+   assert.equal((await local.useItem({roomCode:rs.roomCode,seat:"red"},"red",{matchId:request.matchId,requestId:randomUUID(),expectedVersion:state().stateVersion,itemCode:"time_pressure"})).code,"item_already_used_this_turn");
+   const red2=await createUser(),black2=await createUser();const failing=new RoomsService(()=>"FAIL23",{now:()=>now,schedule:()=>()=>{}},betting,wallet,loadouts,usage);
+   const r2=failing.createCasual(profile(red2),"earth"),b2=failing.joinCasual(r2.roomCode,profile(black2));attach(failing,r2,"red");attach(failing,b2,"black");
+   failing.setItemsEnabled(r2.roomCode,red2.id,true);await failing.setLoadout(r2.roomCode,red2.id,["scout"]);await failing.setLoadout(r2.roomCode,black2.id,[]);
+   await Promise.all([failing.setReady(r2.roomCode,red2.id,true),failing.setReady(r2.roomCode,black2.id,true)]);
+   const failState=failing.matchSnapshot({roomCode:r2.roomCode,seat:"red"},"red");
+   await pool.query("CREATE FUNCTION fail_item_usage() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected'; END $$");await pool.query("CREATE TRIGGER fail_usage BEFORE INSERT ON item_usages FOR EACH ROW EXECUTE FUNCTION fail_item_usage()");
+   try{const ack=await failing.useItem({roomCode:r2.roomCode,seat:"red"},"red",{matchId:failState.matchId,requestId:randomUUID(),expectedVersion:failState.stateVersion,itemCode:"scout",targetPieceId:"black-soldier-0"});assert.equal(ack.ok,false);}
+   finally{await pool.query("DROP TRIGGER fail_usage ON item_usages");await pool.query("DROP FUNCTION fail_item_usage()");}
+   assert.equal((await quantities(red2.id)).get("scout"),1);assert.equal(failing.matchSnapshot({roomCode:r2.roomCode,seat:"red"},"red").stateVersion,0);
+   await local.onModuleDestroy();await failing.onModuleDestroy();
   });
  }finally{
   if(app)await app.close();if(pool)await pool.end();assert.match(testSchema,/^items_test_[0-9a-f]{32}$/);await admin.query(`DROP SCHEMA IF EXISTS "${testSchema}" CASCADE`);await admin.end();

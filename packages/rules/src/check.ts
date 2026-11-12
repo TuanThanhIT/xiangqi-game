@@ -1,13 +1,14 @@
 import type { Piece, Side } from "./types";
 import { canPieceMoveByGeometry } from "./piece-movement";
 import { assertValidPosition } from "./validate-position";
+import { hasEffect, type BoardEffect } from "./effects";
 
 /**
  * Kiểm tra đe dọa theo hình học và hai Tướng đối mặt, không thay đổi đầu vào.
  * Yêu cầu đúng một Tướng mỗi phe; các dữ liệu quân khác được giả định hợp lệ.
  * Không đệ quy xét nước đi hợp lệ/an toàn của quân tấn công, không xác định kết thúc trận.
  */
-export function isInCheck(pieces: readonly Piece[], side: Side): boolean {
+export function isInCheck(pieces: readonly Piece[], side: Side, effects: readonly BoardEffect[] = []): boolean {
   assertValidPosition(pieces, side);
   const blackGenerals = pieces.filter((piece) => piece.type === "general" && piece.side === "black");
   const redGenerals = pieces.filter((piece) => piece.type === "general" && piece.side === "red");
@@ -27,6 +28,6 @@ export function isInCheck(pieces: readonly Piece[], side: Side): boolean {
     if (!blocked) return true;
   }
 
-  return pieces.some((piece) => piece.side !== side &&
+  return pieces.some((piece) => piece.side !== side && !hasEffect(effects, piece.id, "seal") &&
     canPieceMoveByGeometry(pieces, piece.id, general.position));
 }

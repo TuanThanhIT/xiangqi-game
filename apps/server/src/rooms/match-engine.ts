@@ -1,6 +1,7 @@
 import type { Piece, Side } from "@xiangqi/rules";
 import type { OnlineGameResult } from "./room-game";
 import type { PublicClock } from "./game-clock";
+import { createItemState, type ItemState, type ScoutResult } from "../items/item-effects";
 
 export type MatchAction = "move" | "resign" | "draw_offer" | "draw_accept" | "draw_reject";
 export interface MatchRequest {
@@ -11,7 +12,7 @@ export interface MatchRequest {
   to?: Piece["position"];
   offerId?: string;
 }
-export type MatchAck = { ok: true; requestId: string; stateVersion: number } |
+export type MatchAck = { ok: true; requestId: string; stateVersion: number; scout?: ScoutResult } |
   { ok: false; requestId: string | null; code: string; currentVersion?: number };
 export interface DrawOffer {
   id: string;
@@ -21,6 +22,7 @@ export interface DrawOffer {
   status: "pending" | "accepted" | "rejected" | "expired" | "closed";
 }
 export interface MatchSession {
+  items: ItemState;
   id: string;
   startedAt: number;
   drawRevision: number;
@@ -31,6 +33,12 @@ export interface MatchSession {
   requests: Map<string, { fingerprint: string; ack: MatchAck }>;
 }
 export interface MatchSnapshot {
+  turnSequence: number;
+  activeEffects: Array<Omit<ItemState["effects"][number], "ownerAccountId">>;
+  usedItems: ItemState["history"];
+  ownUsedItems: string[];
+  ownScout: ScoutResult | null;
+  ownPendingItem: {requestId: string; status: "pending"} | null;
   matchId: string;
   roomCode: string;
   viewerSide: Side;
@@ -78,7 +86,7 @@ export function parseMatchRequest(value: unknown, action: MatchAction): MatchReq
   return request;
 }
 export function createMatchSession(id: string, startedAt: number, loadouts: Record<Side, string[]>): MatchSession {
-  return { id, startedAt, loadouts: structuredClone(loadouts), drawRevision: 0, offer: null,
+  return { id, startedAt, items: createItemState(), loadouts: structuredClone(loadouts), drawRevision: 0, offer: null,
     counts: {red: 0, black: 0}, lastOfferAt: {red: null, black: null}, requests: new Map() };
 }
 export function expireDraw(session: MatchSession, now: number): boolean {

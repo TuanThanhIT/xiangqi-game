@@ -16,6 +16,7 @@ export const moveErrors = {
   NOT_YOUR_TURN: "Chưa đến lượt của bạn.",
   ILLEGAL_MOVE: "Nước đi không hợp lệ.",
   REQUEST_ID_CONFLICT: "Request ID đã được dùng cho yêu cầu khác.",
+  ACTION_PENDING: "Một hành động vật phẩm đang được xử lý.",
   INTERNAL_ERROR: "Không thể xử lý nước đi.",
 };
 export type MoveError = keyof typeof moveErrors;

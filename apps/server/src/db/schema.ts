@@ -182,12 +182,47 @@ export const itemUsages = pgTable("item_usages", {
   check("item_usages_committed", sql`${t.status} = 'committed' and ${t.quantityConsumed} = 1`),
 ]);
 
+export type CasualMatchResult =
+  {status:"finished";winner:"red"|"black";loser:"red"|"black";reason:string} |
+  {status:"draw"|"cancelled";reason:string};
+
+export const casualMatchResults = pgTable("casual_match_results", {
+  matchId: uuid("match_id").primaryKey(),
+  roomCode: text("room_code").notNull(),
+  redAccountId: uuid("red_account_id").notNull().references(() => accounts.id),
+  blackAccountId: uuid("black_account_id").notNull().references(() => accounts.id),
+  result: jsonb("result").$type<CasualMatchResult>().notNull(),
+  reason: text("reason").notNull(),
+  winnerAccountId: uuid("winner_account_id").references(() => accounts.id),
+  rewardPolicy: text("reward_policy").notNull().default("casual_win_reward_v1"),
+  rewardAmount: bigint("reward_amount", {mode:"number"}).notNull().default(5),
+  rewardEligible: boolean("reward_eligible").notNull(),
+  rewardStatus: text("reward_status").notNull(),
+  idempotencyKey: text("idempotency_key").notNull(),
+  walletEntryNo: integer("wallet_entry_no"),
+  walletAvailableAfter: bigint("wallet_available_after", {mode:"number"}),
+  createdAt: timestamp("created_at", {withTimezone:true}).notNull().defaultNow(),
+  creditedAt: timestamp("credited_at", {withTimezone:true}),
+}, t => [
+  uniqueIndex("casual_match_results_idempotency_unique").on(t.idempotencyKey),
+  index("casual_match_results_reward_status_idx").on(t.rewardStatus),
+  check("casual_match_results_players", sql`${t.redAccountId} <> ${t.blackAccountId}`),
+  check("casual_match_results_reward_amount", sql`${t.rewardAmount} = 5`),
+  check("casual_match_results_reward_state", sql`
+    (${t.rewardEligible} and ${t.winnerAccountId} is not null and ${t.rewardStatus} in ('pending','credited')) or
+    (not ${t.rewardEligible} and ${t.rewardStatus} = 'not_eligible' and ${t.walletEntryNo} is null and ${t.walletAvailableAfter} is null and ${t.creditedAt} is null)`),
+  check("casual_match_results_credit_state", sql`
+    (${t.rewardStatus} = 'credited' and ${t.walletEntryNo} is not null and ${t.walletAvailableAfter} is not null and ${t.creditedAt} is not null) or
+    (${t.rewardStatus} <> 'credited' and ${t.walletEntryNo} is null and ${t.walletAvailableAfter} is null and ${t.creditedAt} is null)`),
+]);
+
 export const walletEntries = pgTable("wallet_entries", {
   accountId: uuid("account_id").notNull().references(()=>wallets.accountId,{onDelete:"cascade"}),
   entryNo: integer("entry_no").notNull(),
   operationKey: text("operation_key").notNull(),
   reason: text("reason").notNull(),
   matchId: uuid("match_id").references(()=>wagers.matchId),
+  rewardMatchId: uuid("reward_match_id").references(()=>casualMatchResults.matchId),
   purchaseId: uuid("purchase_id").references(()=>itemPurchases.id),
   availableDelta: bigint("available_delta",{mode:"number"}).notNull(),
   heldDelta: bigint("held_delta",{mode:"number"}).notNull(),
@@ -197,7 +232,11 @@ export const walletEntries = pgTable("wallet_entries", {
 },t=>[
   primaryKey({columns:[t.accountId,t.entryNo]}),
   uniqueIndex("wallet_entries_operation_unique").on(t.accountId,t.operationKey),
-  check("wallet_entries_reason",sql`${t.reason} in ('starter_grant','bet_hold','bet_refund','bet_payout','item_purchase')`),
+  check("wallet_entries_reason",sql`${t.reason} in ('starter_grant','bet_hold','bet_refund','bet_payout','item_purchase','casual_match_win_reward')`),
   check("wallet_entries_balances",sql`${t.availableAfter} >= 0 and ${t.heldAfter} >= 0 and ${t.entryNo} > 0`),
-  check("wallet_entries_reference",sql`(${t.reason} = 'starter_grant' and ${t.matchId} is null and ${t.purchaseId} is null) or (${t.reason} in ('bet_hold','bet_refund','bet_payout') and ${t.matchId} is not null and ${t.purchaseId} is null) or (${t.reason} = 'item_purchase' and ${t.matchId} is null and ${t.purchaseId} is not null)`),
+  check("wallet_entries_reference",sql`
+    (${t.reason} = 'starter_grant' and ${t.matchId} is null and ${t.purchaseId} is null and ${t.rewardMatchId} is null) or
+    (${t.reason} in ('bet_hold','bet_refund','bet_payout') and ${t.matchId} is not null and ${t.purchaseId} is null and ${t.rewardMatchId} is null) or
+    (${t.reason} = 'item_purchase' and ${t.matchId} is null and ${t.purchaseId} is not null and ${t.rewardMatchId} is null) or
+    (${t.reason} = 'casual_match_win_reward' and ${t.matchId} is null and ${t.purchaseId} is null and ${t.rewardMatchId} is not null)`),
 ]);

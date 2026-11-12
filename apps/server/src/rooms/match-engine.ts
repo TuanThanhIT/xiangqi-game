@@ -2,6 +2,7 @@ import type { Piece, Side } from "@xiangqi/rules";
 import type { OnlineGameResult } from "./room-game";
 import type { PublicClock } from "./game-clock";
 import { createItemState, type ItemState, type ScoutResult } from "../items/item-effects";
+import type { RoomReward } from "./rooms.types";
 
 export type MatchAction = "move" | "resign" | "draw_offer" | "draw_accept" | "draw_reject";
 export interface MatchRequest {
@@ -55,6 +56,7 @@ export interface MatchSnapshot {
   status: "active" | "result_pending" | "finished" | "cancelled";
   result: OnlineGameResult | null;
   reason: string | null;
+  reward: RoomReward | null;
   drawOffer: DrawOffer | null;
   drawCounts: Record<Side, number>;
   ownDrawAvailableAt: number | null;

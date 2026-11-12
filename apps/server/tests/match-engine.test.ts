@@ -11,10 +11,11 @@ import type { MatchAck, MatchAction } from "../src/rooms/match-engine";
 import type { AuthProfile } from "../src/auth/session/session.service";
 import type { BettingService } from "../src/wallet/betting.service";
 import type { LoadoutService } from "../src/items/loadout.service";
+import type { MatchRewardService } from "../src/wallet/match-reward.service";
 import * as gameHelpers from "../src/rooms/room-game";
 
 const profile=(id:string):AuthProfile=>({id,email:`${id}@example.test`,nickname:id,avatar:{id:"default",name:"Default",assetPath:null}});
-async function setup(stake=0,items=false) {
+async function setup(stake=0,items=false,withRewards=false) {
   let now=1000, holds=0, snapshots=0, payouts=0, records=0, failRecord=false, failPayout=false;
   const tasks=new Set<{at:number;run:()=>void}>();
   const clock:RoomClock={now:()=>now,schedule(run,delay){const task={at:now+delay,run};tasks.add(task);return()=>{tasks.delete(task);};}};
@@ -22,7 +23,11 @@ async function setup(stake=0,items=false) {
   const betting={async hold(){holds++;return {status:"held"};},async recordResult(_id:string,result:unknown){records++;if(failRecord)throw new Error("db unavailable");durable=structuredClone(result);},
     async settle(){if(failPayout)throw new Error("db unavailable");payouts++;return {status:(durable as {status:string}).status==="draw"?"refunded":"settled"};}} as unknown as BettingService;
   const loadouts={async snapshot(){snapshots++;}} as unknown as LoadoutService;
-  const service=new RoomsService(()=>"ABC234",clock,betting,undefined,loadouts);
+  let rewards=0;const rewardService={async finish(input:{result:{status:string;reason:string};redAccountId:string;blackAccountId:string}){
+    rewards++;const eligible=input.result.status==="finished"&&["checkmate","stalemate","total_timeout","turn_timeout","resignation"].includes(input.result.reason);
+    return {rewardStatus:eligible?"credited":"not_eligible",winnerAccountId:eligible?input.blackAccountId:null,walletAvailableAfter:eligible?105:null};
+  }} as unknown as MatchRewardService;
+  const service=new RoomsService(()=>"ABC234",clock,betting,undefined,loadouts,undefined,withRewards?rewardService:undefined);
   service.createCasual(profile("red"),"earth");service.joinCasual("ABC234",profile("black"));
   const identity=(seat:Side)=>({roomCode:"ABC234",seat});
   const sockets:Record<Side,string>={red:"red",black:"black"};
@@ -37,7 +42,7 @@ async function setup(stake=0,items=false) {
   const move=(side:Side,from:object,to:object)=>action(side,"move",request({from,to}));
   return {service,room,state,request,action,move,identity,connect,sockets,tasks,
     set:(value:number)=>{now=value;},flush(){for(const t of [...tasks])if(t.at<=now){tasks.delete(t);t.run();}},
-    stats:()=>({holds,snapshots,payouts,records,durable}),fail:(record:boolean,payout=false)=>{failRecord=record;failPayout=payout;}};
+    stats:()=>({holds,snapshots,payouts,records,durable,rewards}),fail:(record:boolean,payout=false)=>{failRecord=record;failPayout=payout;}};
 }
 function error(ack:MatchAck,code:string){assert.equal(ack.ok,false);if(!ack.ok)assert.equal(ack.code,code);}
 const piece=(id:string,side:Side,type:Piece["type"],row:number,col:number):Piece=>({id,side,type,position:{row:row as Piece["position"]["row"],col:col as Piece["position"]["col"]}});
@@ -192,6 +197,21 @@ test("Draw: agreement dùng wager refund một lần, không tạo thưởng ho�
   await s.room.settlementFlight;assert.equal(s.room.betStatus,"refunded");assert.equal(s.stats().payouts,1);
   assert.deepEqual(s.stats().durable,{status:"draw",reason:"agreement"});assert.equal(s.stats().holds,1);assert.equal(s.stats().snapshots,1);
  }finally{await s.service.onModuleDestroy();}
+});
+
+test("Reward: RoomsService tự chốt reward, giữ riêng số dư và không thưởng disconnect",async()=>{
+ for(const [reason,eligible] of [["resignation",true],["disconnect_timeout",false]] as const){
+  const s=await setup(0,false,true);try{
+   if(reason==="resignation")s.action("red","resign");
+   else {s.room.red.offlineDeadline=1000;s.room.red.presence=false;s.room.red.activeSocketId=null;s.set(61000);s.flush();}
+   const during=s.state("black");assert.equal(during.reward?.eligible,eligible);
+   await s.room.settlementFlight;
+   assert.equal(s.stats().rewards,1);assert.equal(s.state("black").reward?.eligible,eligible);
+   assert.equal(s.state("black").reward?.status,eligible?"credited":"not_eligible");
+   assert.equal(s.state("black").reward?.walletBalance,eligible?105:undefined);
+   if(eligible)assert.equal(s.state("red").reward?.walletBalance,undefined);
+  }finally{await s.service.onModuleDestroy();}
+ }
 });
 
 test("Match: request xen giữa ghi kết quả và payout không thể sửa bàn hoặc chốt lại",async()=>{

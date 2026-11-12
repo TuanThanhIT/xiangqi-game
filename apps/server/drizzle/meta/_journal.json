@@ -36,6 +36,13 @@
       "when": 1794419302475,
       "tag": "0004_shallow_blacklash",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1794501531223,
+      "tag": "0005_secret_sabretooth",
+      "breakpoints": true
     }
   ]
 }

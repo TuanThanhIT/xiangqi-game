@@ -19,7 +19,8 @@ export class WalletService {
   async history(accountId:string,before?:number,limit=20) {
     const rows=await this.database.db.select().from(walletEntries).where(and(eq(walletEntries.accountId,accountId),
       before===undefined?undefined:lt(walletEntries.entryNo,before))).orderBy(desc(walletEntries.entryNo)).limit(limit+1);
-    const items=rows.slice(0,limit).map(({accountId:_accountId,operationKey:_operationKey,...entry})=>entry);
+    const items=rows.slice(0,limit).map(({accountId:_accountId,operationKey:_operationKey,rewardMatchId,...entry})=>
+      ({...entry,matchId:entry.matchId??rewardMatchId}));
     return {items,nextCursor:rows.length>limit?items.at(-1)!.entryNo:null};
   }
   async lock(tx:WalletTx,accountIds:string[]) {

@@ -18,6 +18,7 @@
     "test:registration": "npm.cmd run build && node scripts/test-registration.cjs",
     "smtp:check": "ts-node src/auth/otp/delivery/smtp-check.ts",
     "test:wallet": "npm.cmd run build && node --test scripts/test-wallet.cjs",
+    "test:reward": "npm.cmd run build && node --test scripts/test-reward.cjs",
     "test:items": "npm.cmd run build && node --test scripts/test-items.cjs"
   },
   "dependencies": {

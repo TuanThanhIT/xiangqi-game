@@ -21,6 +21,7 @@ import type { AuthProfile } from "../auth/session/session.service";
 import { clockDeadline, isTotalMinutes, nextClockTurn, publicClock, startGameClock, TURN_MS } from "./game-clock";
 import { BettingService, InsufficientGold } from "../wallet/betting.service";
 import { validGold, WalletService } from "../wallet/wallet.service";
+import { CASUAL_WIN_REWARD, isCasualRewardEligible, MatchRewardService } from "../wallet/match-reward.service";
 import type { RoomBet } from "./rooms.types";
 import { LoadoutService } from "../items/loadout.service";
 import { ItemUsageService, type UsageInput } from "../items/item-usage.service";
@@ -50,7 +51,8 @@ export class RoomsService implements OnModuleDestroy {
     @Optional() private readonly betting?:BettingService,
     @Optional() private readonly wallet?:WalletService,
     @Optional() private readonly loadouts?:LoadoutService,
-    @Optional() private readonly itemUsage?:ItemUsageService) {}
+    @Optional() private readonly itemUsage?:ItemUsageService,
+    @Optional() private readonly rewards?:MatchRewardService) {}
 
   private online(player: Room["red"] | null): boolean { return !!(player?.activeSocketId && player.presence); }
   private clearTimer(room: Room): void { room.timerVersion++; room.cancelTimer?.(); room.cancelTimer = null; }
@@ -323,11 +325,29 @@ export class RoomsService implements OnModuleDestroy {
     if(this.closed)return Promise.resolve();
     if(room.settlementFlight)return room.settlementFlight;
     const flight=Promise.resolve().then(async()=>{
-      if(!this.betting)throw new ServiceUnavailableException();
-      await this.betting.recordResult(room.matchId!,room.game!.result);
-      room.betStatus="result_pending";this.notifyIfPresent(room);
-      const bet=await this.betting.settle(room.matchId!);
-      room.betStatus=bet.status as RoomBet["status"];this.retryRooms.delete(room);
+      let failed=false;
+      if(room.stake&&room.matchId&&room.betStatus!=="settled"&&room.betStatus!=="refunded"){
+        try{
+          if(!this.betting)throw new ServiceUnavailableException();
+          await this.betting.recordResult(room.matchId,room.game!.result);
+          room.betStatus="result_pending";this.notifyIfPresent(room);
+          const bet=await this.betting.settle(room.matchId);
+          room.betStatus=bet.status as RoomBet["status"];
+        }catch{failed=true;}
+      }
+      if(this.rewards&&room.gameMatchId&&room.rewardStatus!=="credited"&&room.rewardStatus!=="not_eligible"){
+        try{
+          room.rewardStatus="pending";
+          if(room.game!.result.status==="playing")throw new Error("match_not_finished");
+          const reward=await this.rewards.finish({matchId:room.gameMatchId,roomCode:room.code,
+            redAccountId:room.red.accountId!,blackAccountId:room.black!.accountId!,result:room.game!.result});
+          room.rewardStatus=reward.rewardStatus as "credited"|"not_eligible";
+          room.rewardWinnerAccountId=reward.winnerAccountId;
+          room.rewardWalletBalance=reward.walletAvailableAfter;
+        }catch{failed=true;room.rewardStatus="pending";}
+      }
+      if(failed)throw new Error("finalization_pending");
+      this.retryRooms.delete(room);
     }).catch(()=>{this.scheduleRetry(room);}).finally(()=>{this.walletWork.delete(flight);room.settlementFlight=undefined;this.emitSettlementState(room);});
     this.walletWork.add(flight);
     room.settlementFlight=flight;return flight;
@@ -480,7 +500,9 @@ export class RoomsService implements OnModuleDestroy {
   notifyChange(code: string): void {
     const room=this.rooms.get(code);
     if (room?.match && room.game?.result.status !== "playing") closeDraw(room.match);
-    if(room?.game&&room.game.result.status!=="playing"&&room.matchId&&room.stake&&room.betStatus!=="settled"&&room.betStatus!=="refunded") {
+    if(room?.game&&room.game.result.status!=="playing"&&room.red.accountId&&
+      ((room.stake&&room.matchId&&room.betStatus!=="settled"&&room.betStatus!=="refunded")||
+       (this.rewards&&room.rewardStatus!=="credited"&&room.rewardStatus!=="not_eligible"))) {
       this.kickSettlement(room);
     }
     // Lỗi listener không được biến một thao tác đã ghi thành ack thất bại.
@@ -595,7 +617,12 @@ export class RoomsService implements OnModuleDestroy {
     if (!room?.match || !room.game || !room.gameClock || !player?.accountId || !player.attached || !this.ownsSocket(identity,socketId)) return null;
     if (this.evaluateDeadlines(room,this.clock.now())) this.notifyChange(room.code);
     const game=room.game, match=room.match, result=game.result;
-    const pending=result.status!=="playing" && !!room.stake && room.betStatus!=="settled" && room.betStatus!=="refunded";
+    const wagerPending=result.status!=="playing" && !!room.stake && room.betStatus!=="settled" && room.betStatus!=="refunded";
+    const pending=wagerPending;
+    const reward=result.status==="playing"?null:{eligible:isCasualRewardEligible(result),amount:CASUAL_WIN_REWARD,
+      status:room.rewardStatus??"pending" as const,
+      ...(room.rewardStatus==="credited"&&room.rewardWinnerAccountId===player.accountId&&room.rewardWalletBalance!=null?
+        {walletBalance:room.rewardWalletBalance}:{})};
     return structuredClone({matchId:match.id,roomCode:room.code,viewerSide:identity.seat,
       players:{red:{nickname:room.red.nickname},black:{nickname:room.black!.nickname}},
       board:game.pieces,sideToMove:game.sideToMove,moveNumber:game.moveNumber??0,
@@ -603,6 +630,7 @@ export class RoomsService implements OnModuleDestroy {
       clock:publicClock(room.gameClock,this.clock.now()),inCheck:isInCheck(game.pieces,game.sideToMove,match.items.effects),
       status:result.status==="playing"?"active":pending?"result_pending":result.status==="cancelled"?"cancelled":"finished",
       result:result.status==="playing"?null:result,reason:result.status==="playing"?null:result.reason,
+      reward,
       drawOffer:match.offer,drawCounts:match.counts,
       ownDrawAvailableAt:match.lastOfferAt[identity.seat]===null?null:match.lastOfferAt[identity.seat]!+60_000,
       ownLoadout:match.loadouts[identity.seat].filter(code => !match.items.used[identity.seat].includes(code as never)),

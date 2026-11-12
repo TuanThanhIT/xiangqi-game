@@ -50,6 +50,7 @@ test("Wallet/bets: isolated PostgreSQL, real HTTP/Auth/Socket.IO",{timeout:90000
   }
   const old=await user(),oldPending=await user(false);
   await migrate("0002_colorful_titanium_man.sql");await migrate("0003_thin_payback.sql");
+  await migrate("0004_shallow_blacklash.sql");await migrate("0005_secret_sabretooth.sql");
   app=await NestFactory.create(AppModule,{logger:false,abortOnError:false,bodyParser:false});
   app.get(DatabaseService).db=db;
   const wallet=app.get(WalletService),betting=app.get(BettingService),rooms=app.get(RoomsService);
@@ -192,7 +193,7 @@ test("Wallet/bets: isolated PostgreSQL, real HTTP/Auth/Socket.IO",{timeout:90000
    assert.equal(sentPlayingBeforeCommit,false);const id=f.room.matchId;assert.ok(id);assert.equal((await ready(f,f.red)).status,200);assert.equal(f.room.matchId,id);
    await balances(f.red,80,20);await balances(f.black,80,20);assert.equal((await wallet.history(f.red.id)).items.length,2);
    const settled=waitState(f.sb,state=>state.bet?.status==="settled");
-   await resign(f);await balances(f.red,80,0);await balances(f.black,120,0);assert.equal((await betting.get(id)).status,"settled");
+   await resign(f);await balances(f.red,80,0);await balances(f.black,125,0);assert.equal((await betting.get(id)).status,"settled");
    assert.equal((await settled).game.result.reason,"resignation");
   });
   await t.test("match draw agreement over real Socket.IO refunds held gold exactly once",async()=>{
@@ -249,9 +250,9 @@ test("Wallet/bets: isolated PostgreSQL, real HTTP/Auth/Socket.IO",{timeout:90000
   await t.test("result_pending remains held on payout failure; retry settles once",async()=>{
    const f=await roomPair(20);await ready(f,f.red);await ready(f,f.black);
    const original=betting.settle;betting.settle=async()=>{throw new Error("Injected payout failure");};
-   try{await resign(f);assert.equal((await betting.get(f.room.matchId)).status,"result_pending");await balances(f.red,80,20);await balances(f.black,80,20);assert.equal(rooms.publicGameState(f.code).bet.pending,true);}
+   try{await resign(f);assert.equal((await betting.get(f.room.matchId)).status,"result_pending");await balances(f.red,80,20);await balances(f.black,85,20);assert.equal(rooms.publicGameState(f.code).bet.pending,true);}
    finally{betting.settle=original;}
-   await rooms.retrySettlements();await balances(f.red,80,0);await balances(f.black,120,0);await rooms.retrySettlements();await balances(f.black,120,0);
+   await rooms.retrySettlements();await balances(f.red,80,0);await balances(f.black,125,0);await rooms.retrySettlements();await balances(f.black,125,0);
   });
   await t.test("UI-visible result not saved durably is refunded on simulated restart",async()=>{
    const f=await roomPair(20);await ready(f,f.red);await ready(f,f.black);
@@ -261,13 +262,13 @@ test("Wallet/bets: isolated PostgreSQL, real HTTP/Auth/Socket.IO",{timeout:90000
    // Simulate the old process disappearing: its in-memory retry is no longer running.
    rooms.retryRooms.delete(f.room);
    await new BettingService(app.get(DatabaseService),wallet).recover();
-   await balances(f.red,100,0);await balances(f.black,100,0);assert.equal((await betting.get(f.room.matchId)).status,"refunded");
+   await balances(f.red,100,0);await balances(f.black,105,0);assert.equal((await betting.get(f.room.matchId)).status,"refunded");
   });
   await t.test("clock terminal result reaches wager settlement through timer, no request needed",async()=>{
    const f=await roomPair(10);await ready(f,f.red);await ready(f,f.black);now=f.room.gameClock.turnStartedAt+60000;
    for(const task of [...roomTimers])if(task.at<=now){roomTimers.delete(task);task.callback();}
    await durableDone(f.room);assert.equal((await betting.get(f.room.matchId)).result.reason,"turn_timeout");
-   await balances(f.red,90,0);await balances(f.black,110,0);assert.equal(f.room.betStatus,"settled");
+   await balances(f.red,90,0);await balances(f.black,115,0);assert.equal(f.room.betStatus,"settled");
   });
   await t.test("single-backend advisory lock rejects concurrent runtime owners",async()=>{
    const a=new DatabaseService(),b=new DatabaseService();

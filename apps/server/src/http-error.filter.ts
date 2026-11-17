@@ -4,6 +4,7 @@ const errors: Record<string, { status: number; message: string }> = {
   INVALID_BET: {status:400,message:"Mức cược phải là số vàng nguyên không âm."},
   INSUFFICIENT_GOLD: {status:409,message:"Chưa đủ vàng khả dụng để đặt cược. Vui lòng kiểm tra ví và sẵn sàng lại."},
   INVALID_WALLET_QUERY: {status:400,message:"Tham số xem lịch sử ví không hợp lệ."},
+  INVALID_CHECK_IN_REQUEST: {status:400,message:"Yêu cầu điểm danh không hợp lệ."},
   WALLET_NOT_FOUND: {status:404,message:"Chưa có ví vàng cho tài khoản này."},
   WALLET_LIMIT: {status:400,message:"Biến động vượt giới hạn số dư ví."},
   BET_NOT_FOUND: {status:404,message:"Không tìm thấy thông tin cược."},

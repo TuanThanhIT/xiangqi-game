@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { bigint, boolean, check, index, integer, jsonb, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { bigint, boolean, check, date, index, integer, jsonb, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 
 export const avatars = pgTable("avatars", {
   id: text("id").primaryKey(),
@@ -216,6 +216,29 @@ export const casualMatchResults = pgTable("casual_match_results", {
     (${t.rewardStatus} <> 'credited' and ${t.walletEntryNo} is null and ${t.walletAvailableAfter} is null and ${t.creditedAt} is null)`),
 ]);
 
+export const dailyCheckIns = pgTable("daily_check_ins", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  accountId: uuid("account_id").notNull().references(() => accounts.id, {onDelete:"cascade"}),
+  localDate: date("local_date", {mode:"string"}).notNull(),
+  cycleDay: integer("cycle_day").notNull(),
+  consecutiveDays: integer("consecutive_days").notNull(),
+  dailyReward: bigint("daily_reward", {mode:"number"}).notNull(),
+  weeklyBonus: bigint("weekly_bonus", {mode:"number"}).notNull(),
+  monthlyBonus: bigint("monthly_bonus", {mode:"number"}).notNull(),
+  totalReward: bigint("total_reward", {mode:"number"}).notNull(),
+  walletAvailableAfter: bigint("wallet_available_after", {mode:"number"}).notNull(),
+  dailyEntryNo: integer("daily_entry_no").notNull(),
+  milestoneEntryNo: integer("milestone_entry_no"),
+  claimedAt: timestamp("claimed_at", {withTimezone:true}).notNull(),
+}, t => [
+  uniqueIndex("daily_check_ins_account_date_unique").on(t.accountId,t.localDate),
+  index("daily_check_ins_account_date_idx").on(t.accountId,t.localDate),
+  check("daily_check_ins_cycle_day",sql`${t.cycleDay} between 1 and 30`),
+  check("daily_check_ins_consecutive",sql`${t.consecutiveDays} > 0`),
+  check("daily_check_ins_rewards",sql`${t.dailyReward} = 20 and ${t.weeklyBonus} >= 0 and ${t.monthlyBonus} >= 0 and ${t.totalReward} = ${t.dailyReward} + ${t.weeklyBonus} + ${t.monthlyBonus}`),
+  check("daily_check_ins_entries",sql`${t.dailyEntryNo} > 0 and (${t.milestoneEntryNo} is null or ${t.milestoneEntryNo} = ${t.dailyEntryNo} + 1)`),
+]);
+
 export const walletEntries = pgTable("wallet_entries", {
   accountId: uuid("account_id").notNull().references(()=>wallets.accountId,{onDelete:"cascade"}),
   entryNo: integer("entry_no").notNull(),
@@ -223,7 +246,9 @@ export const walletEntries = pgTable("wallet_entries", {
   reason: text("reason").notNull(),
   matchId: uuid("match_id").references(()=>wagers.matchId),
   rewardMatchId: uuid("reward_match_id").references(()=>casualMatchResults.matchId),
+  checkInId: uuid("check_in_id").references(()=>dailyCheckIns.id),
   purchaseId: uuid("purchase_id").references(()=>itemPurchases.id),
+  metadata: jsonb("metadata").$type<Record<string,unknown>>().notNull().default(sql`'{}'::jsonb`),
   availableDelta: bigint("available_delta",{mode:"number"}).notNull(),
   heldDelta: bigint("held_delta",{mode:"number"}).notNull(),
   availableAfter: bigint("available_after",{mode:"number"}).notNull(),
@@ -232,11 +257,12 @@ export const walletEntries = pgTable("wallet_entries", {
 },t=>[
   primaryKey({columns:[t.accountId,t.entryNo]}),
   uniqueIndex("wallet_entries_operation_unique").on(t.accountId,t.operationKey),
-  check("wallet_entries_reason",sql`${t.reason} in ('starter_grant','bet_hold','bet_refund','bet_payout','item_purchase','casual_match_win_reward')`),
+  check("wallet_entries_reason",sql`${t.reason} in ('starter_grant','bet_hold','bet_refund','bet_payout','item_purchase','casual_match_win_reward','daily_check_in_reward','check_in_7_day_bonus','check_in_30_day_bonus')`),
   check("wallet_entries_balances",sql`${t.availableAfter} >= 0 and ${t.heldAfter} >= 0 and ${t.entryNo} > 0`),
   check("wallet_entries_reference",sql`
-    (${t.reason} = 'starter_grant' and ${t.matchId} is null and ${t.purchaseId} is null and ${t.rewardMatchId} is null) or
-    (${t.reason} in ('bet_hold','bet_refund','bet_payout') and ${t.matchId} is not null and ${t.purchaseId} is null and ${t.rewardMatchId} is null) or
-    (${t.reason} = 'item_purchase' and ${t.matchId} is null and ${t.purchaseId} is not null and ${t.rewardMatchId} is null) or
-    (${t.reason} = 'casual_match_win_reward' and ${t.matchId} is null and ${t.purchaseId} is null and ${t.rewardMatchId} is not null)`),
+    (${t.reason} = 'starter_grant' and ${t.matchId} is null and ${t.purchaseId} is null and ${t.rewardMatchId} is null and ${t.checkInId} is null) or
+    (${t.reason} in ('bet_hold','bet_refund','bet_payout') and ${t.matchId} is not null and ${t.purchaseId} is null and ${t.rewardMatchId} is null and ${t.checkInId} is null) or
+    (${t.reason} = 'item_purchase' and ${t.matchId} is null and ${t.purchaseId} is not null and ${t.rewardMatchId} is null and ${t.checkInId} is null) or
+    (${t.reason} = 'casual_match_win_reward' and ${t.matchId} is null and ${t.purchaseId} is null and ${t.rewardMatchId} is not null and ${t.checkInId} is null) or
+    (${t.reason} in ('daily_check_in_reward','check_in_7_day_bonus','check_in_30_day_bonus') and ${t.matchId} is null and ${t.purchaseId} is null and ${t.rewardMatchId} is null and ${t.checkInId} is not null)`),
 ]);

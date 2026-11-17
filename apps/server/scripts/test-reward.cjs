@@ -26,14 +26,14 @@ test("Reward: isolated PostgreSQL and durable idempotency",{timeout:90000},async
   assert.equal((await admin.query("select current_database() as name")).rows[0].name,"xiangqi_dev");
   await admin.query(`CREATE SCHEMA "${testSchema}"`);
   pool=new Pool({connectionString:databaseUrl(),options:`-c search_path=${testSchema}`,connectionTimeoutMillis:5000});
-  const names=["0000_cultured_marten_broadcloak.sql","0001_dear_proteus.sql","0002_colorful_titanium_man.sql","0003_thin_payback.sql","0004_shallow_blacklash.sql","0005_secret_sabretooth.sql"];
+  const names=["0000_cultured_marten_broadcloak.sql","0001_dear_proteus.sql","0002_colorful_titanium_man.sql","0003_thin_payback.sql","0004_shallow_blacklash.sql","0005_secret_sabretooth.sql","0006_peaceful_mongoose.sql"];
   tempMigrations=mkdtempSync(resolve(tmpdir(),"xiangqi-reward-migrations-"));mkdirSync(resolve(tempMigrations,"meta"));
   for(const name of names)writeFileSync(resolve(tempMigrations,name),readFileSync(resolve(__dirname,"../drizzle",name),"utf8").replaceAll('"public".',`"${testSchema}".`));
   writeFileSync(resolve(tempMigrations,"meta","_journal.json"),readFileSync(resolve(__dirname,"../drizzle/meta/_journal.json"),"utf8"));
   const db=drizzle(pool,{schema}),database={db},migrationSchema=`${testSchema}_migrations`;
   await migrate(db,{migrationsFolder:tempMigrations,migrationsSchema:migrationSchema});
   await migrate(db,{migrationsFolder:tempMigrations,migrationsSchema:migrationSchema});
-  assert.equal((await admin.query(`select count(*)::int as count from "${migrationSchema}"."__drizzle_migrations"`)).rows[0].count,6);
+  assert.equal((await admin.query(`select count(*)::int as count from "${migrationSchema}"."__drizzle_migrations"`)).rows[0].count,7);
   const wallet=new WalletService(database),betting=new BettingService(database,wallet),rewards=new MatchRewardService(database,wallet);
   const passwordHash=await hashPassword("Reward-test-only-password-2026");
   async function user(){const id=randomUUID();await db.insert(schema.accounts).values({id,email:`reward-${id}@example.test`,nickname:`Reward ${id}`,passwordHash,emailVerifiedAt:new Date()});return {id};}

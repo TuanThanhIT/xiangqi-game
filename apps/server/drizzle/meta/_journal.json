@@ -43,6 +43,13 @@
       "when": 1794501531223,
       "tag": "0005_secret_sabretooth",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1794503797344,
+      "tag": "0006_peaceful_mongoose",
+      "breakpoints": true
     }
   ]
 }

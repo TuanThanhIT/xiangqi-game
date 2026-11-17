@@ -74,20 +74,9 @@ Quyết định triển khai backend vật phẩm:
 - Thưởng thắng Giải trí online thêm 5 vàng nếu thắng bằng chiếu bí, đối thủ hết nước, hết giờ thi đấu hoặc đầu hàng. Áp dụng có và không cược. Quá hạn kết nối, hòa, hủy và reason ngoài allowlist không phát khoản này. Vàng thưởng, nhiệm vụ và cược là các khoản riêng.
 - Cửa hàng cho mua nhiều bản cùng loại một lần. Xem số lượng, tổng giá và vàng còn lại trước khi xác nhận. Server kiểm tra giá/số dư và cập nhật ví, kho cùng giao dịch. Thiếu vàng thì giữ nguyên cả hai. Lịch sử ví ghi thời gian, lý do, số cộng/trừ và số dư sau giao dịch. Dòng mua ghi tên món, số lượng và tổng giá. Kho hiển thị số lượng còn lại.
 - Điểm danh và nhiệm vụ dùng chung tài khoản, mở từ sảnh, nhận vào cùng ví. Điểm danh một lần mỗi local date theo `Asia/Ho_Chi_Minh`, được 20 vàng. Thêm 50 vàng ở cycleDay 7/14/21/28 và 200 ở cycleDay 30; ngày 30 không nhận thêm bonus tuần. Đủ chu kỳ 30 ngày liên tiếp nhận 1.000 vàng. Ngày liên tiếp sau cycleDay 30 quay về 1 nhưng vẫn tăng số ngày liên tiếp; bỏ lỡ ít nhất một local date thì cả cycleDay và chuỗi liên tiếp quay về 1.
-- Nhiệm vụ ngày đợt đầu tính từ Giải trí online, có hoặc không cược. Xếp hạng có thể dùng chung nhiệm vụ phù hợp sau khi ra mắt. Mỗi nhiệm vụ nhận một lần mỗi ngày. Hoàn thành thì mở mục Nhiệm vụ bấm Nhận thưởng đến hết ngày hôm sau theo giờ Việt Nam. Ngày mới có tiến độ riêng.
-
-| Nhiệm vụ | Điều kiện | Vàng |
-|---|---|---:|
-| Khởi động | Hoàn thành 1 trận | 5 |
-| Bền bỉ | Hoàn thành 3 trận | 10 |
-| Bắt 5 quân | Ăn 5 quân khác nhau trong cùng trận | 15 |
-| Hạ Pháo | Ăn ít nhất 1 Pháo đối thủ | 10 |
-| Săn Xe | Ăn ít nhất 1 Xe đối thủ | 12 |
-| Phá thế chiếu | Đi 2 nước giải chiếu hợp lệ, có thể qua nhiều trận | 8 |
-| Thắng một ván | Thắng bằng chiếu bí, đối thủ hết nước hoặc hết giờ | 15 |
-| Thử vật phẩm | Kích hoạt thành công 1 món trong phòng bật vật phẩm | 5 |
-
-Tổng tối đa 80 vàng nhiệm vụ/ngày. Khởi động và Bền bỉ chỉ tính trận kết thúc bằng chiếu bí, hết nước hoặc hết giờ. Tiến độ ăn quân, giải chiếu và dùng vật phẩm vẫn tính nếu đối thủ đầu hàng. Trận bị hủy không tính. Quân hồi sinh rồi bị ăn lại chỉ tính một lần vào Bắt 5 quân. Một hành động có thể đóng góp vào nhiều nhiệm vụ.
+- Hệ thống nhiệm vụ Giải trí gồm 7 nhiệm vụ ngày (tối đa 50 vàng/ngày), 8 nhiệm vụ tuần bắt đầu thứ Hai (tối đa 280 vàng/tuần) và 10 thành tựu dài hạn. Catalog code/metric/target/reward được quản lý phía server; không có nhiệm vụ ranked trong đợt này. Daily và weekly hết period mà chưa claim thì expired, không carry tiến độ; achievement không hết hạn.
+- Tiến độ chỉ lấy từ kết quả, nước đi và item usage được server xác nhận. Chiếu bí, hết nước, hết tổng giờ và hết giờ lượt tính completed cho hai bên; đầu hàng chỉ tính người thắng; hòa thỏa thuận tính completed cho cả hai; disconnect timeout và hủy không tạo contribution. Quân Hồi sinh bị ăn lại được tính là capture mới. `win_without_item` chỉ xét item usage thành công của chính người thắng.
+- Match contribution được lưu bền vững và idempotent theo match/account/version rồi mới cập nhật đồng thời daily, weekly và lifetime. Reward không tự cộng khi hoàn thành: người chơi chủ động claim; claim và wallet ledger `mission_reward` là một transaction, độc lập với cược, thưởng thắng và điểm danh. Period và reset dùng `Asia/Ho_Chi_Minh`, dựa trên thời điểm kết quả do server chốt.
 
 ## 6. Bạn bè, chat và lịch sử
 

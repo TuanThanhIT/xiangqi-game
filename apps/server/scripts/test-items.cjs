@@ -38,7 +38,7 @@ test("shop, inventory and private pre-match loadouts",{timeout:90000},async t=>{
   const password="Items-test-password-2026",passwordHash=await hashPassword(password);
   async function createUser(verified=true){const id=randomUUID(),email=`items-${id}@example.test`;await db.insert(schema.accounts).values({id,email,nickname:`Player ${id}`,passwordHash,emailVerifiedAt:verified?new Date():null});return{id,email};}
   const old=await createUser(),pending=await createUser(false);
-  await migrate("0002_colorful_titanium_man.sql");await migrate("0003_thin_payback.sql");await migrate("0004_shallow_blacklash.sql");await migrate("0005_secret_sabretooth.sql");await migrate("0006_peaceful_mongoose.sql");
+  await migrate("0002_colorful_titanium_man.sql");await migrate("0003_thin_payback.sql");await migrate("0004_shallow_blacklash.sql");await migrate("0005_secret_sabretooth.sql");await migrate("0006_peaceful_mongoose.sql");await migrate("0007_fearless_human_fly.sql");
   app=await NestFactory.create(AppModule,{logger:false,abortOnError:false,bodyParser:false});app.get(DatabaseService).db=db;configureHttp(app);await app.listen(0,"127.0.0.1");
   const catalog=app.get(CatalogService),inventory=app.get(InventoryService),shop=app.get(ShopService),wallet=app.get(WalletService),betting=app.get(BettingService),loadouts=app.get(LoadoutService),usage=app.get(ItemUsageService),rooms=app.get(RoomsService);
   const base=await app.getUrl();

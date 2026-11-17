@@ -26,6 +26,8 @@ import type { RoomBet } from "./rooms.types";
 import { LoadoutService } from "../items/loadout.service";
 import { ItemUsageService, type UsageInput } from "../items/item-usage.service";
 import { afterItemMove, casualResult, ItemRejected, parseItemRequest, refundTimeSaver, simulateItem, type ItemPlan } from "../items/item-effects";
+import { MissionService, type MissionMatchInput } from "../missions/mission.service";
+import { contributionSummaries } from "../missions/mission-contribution";
 
 // Token DI nội bộ, không lấy từ request hoặc biến môi trường.
 export const ROOM_CODE_GENERATOR = Symbol("ROOM_CODE_GENERATOR");
@@ -52,7 +54,8 @@ export class RoomsService implements OnModuleDestroy {
     @Optional() private readonly wallet?:WalletService,
     @Optional() private readonly loadouts?:LoadoutService,
     @Optional() private readonly itemUsage?:ItemUsageService,
-    @Optional() private readonly rewards?:MatchRewardService) {}
+    @Optional() private readonly rewards?:MatchRewardService,
+    @Optional() private readonly missions?:MissionService) {}
 
   private online(player: Room["red"] | null): boolean { return !!(player?.activeSocketId && player.presence); }
   private clearTimer(room: Room): void { room.timerVersion++; room.cancelTimer?.(); room.cancelTimer = null; }
@@ -110,6 +113,7 @@ export class RoomsService implements OnModuleDestroy {
     }
     if (result) {
       room.game = { ...room.game, result, revision: room.game.revision + 1 };
+      room.resultAt ??= resolvedAt;
       this.stopGameClock(room, resolvedAt);
       if (room.match) closeDraw(room.match);
     }
@@ -245,6 +249,7 @@ export class RoomsService implements OnModuleDestroy {
     room.red.offlineDeadline=null;room.black!.offlineDeadline=null;
     const now=this.clock.now();room.gameClock=startGameClock((room.totalMinutes??15)*60_000,now);
     room.gameMatchId ??= randomUUID();
+    room.missionStatus="unrecorded";room.missionCaptures=[];room.resultAt=undefined;
     room.match=createMatchSession(room.gameMatchId,now,{
       red:room.itemsEnabled?[...(room.red.loadout??[])]:[],
       black:room.itemsEnabled?[...(room.black!.loadout??[])]:[],
@@ -326,6 +331,10 @@ export class RoomsService implements OnModuleDestroy {
     if(room.settlementFlight)return room.settlementFlight;
     const flight=Promise.resolve().then(async()=>{
       let failed=false;
+      const missionInput=this.missionInput(room);
+      if(this.missions&&missionInput&&room.missionStatus==="unrecorded"){
+        try{await this.missions.record(missionInput);room.missionStatus="recorded";}catch{failed=true;}
+      }
       if(room.stake&&room.matchId&&room.betStatus!=="settled"&&room.betStatus!=="refunded"){
         try{
           if(!this.betting)throw new ServiceUnavailableException();
@@ -346,11 +355,22 @@ export class RoomsService implements OnModuleDestroy {
           room.rewardWalletBalance=reward.walletAvailableAfter;
         }catch{failed=true;room.rewardStatus="pending";}
       }
+      const financesDone=(!room.stake||room.betStatus==="settled"||room.betStatus==="refunded")&&
+        (!this.rewards||room.rewardStatus==="credited"||room.rewardStatus==="not_eligible");
+      if(this.missions&&room.gameMatchId&&room.missionStatus==="recorded"&&financesDone){
+        try{await this.missions.apply(room.gameMatchId);room.missionStatus="applied";}catch{failed=true;}
+      }
       if(failed)throw new Error("finalization_pending");
       this.retryRooms.delete(room);
     }).catch(()=>{this.scheduleRetry(room);}).finally(()=>{this.walletWork.delete(flight);room.settlementFlight=undefined;this.emitSettlementState(room);});
     this.walletWork.add(flight);
     room.settlementFlight=flight;return flight;
+  }
+  private missionInput(room:Room):MissionMatchInput|null {
+    const result=room.game?.result,matchId=room.gameMatchId,resultAt=room.resultAt;
+    if(!result||result.status==="playing"||!matchId||resultAt===undefined||!room.black?.accountId||!room.red.accountId)return null;
+    const contributions=contributionSummaries(result,{red:room.red.accountId,black:room.black.accountId},room.missionCaptures??[],room.match?.items.history??[]);
+    return {matchId,resultStatus:result.status,reason:result.reason,resultAt:new Date(resultAt),contributions};
   }
   private emitSettlementState(room:Room):void {
     // Do not immediately re-enter a failed attempt via notifyChange.
@@ -502,7 +522,8 @@ export class RoomsService implements OnModuleDestroy {
     if (room?.match && room.game?.result.status !== "playing") closeDraw(room.match);
     if(room?.game&&room.game.result.status!=="playing"&&room.red.accountId&&
       ((room.stake&&room.matchId&&room.betStatus!=="settled"&&room.betStatus!=="refunded")||
-       (this.rewards&&room.rewardStatus!=="credited"&&room.rewardStatus!=="not_eligible"))) {
+       (this.rewards&&room.rewardStatus!=="credited"&&room.rewardStatus!=="not_eligible")||
+       (this.missions&&room.missionStatus!=="applied"))) {
       this.kickSettlement(room);
     }
     // Lỗi listener không được biến một thao tác đã ghi thành ack thất bại.
@@ -558,6 +579,7 @@ export class RoomsService implements OnModuleDestroy {
     const game = room.game;
     let ack: MoveAck;
     let next: ReturnType<typeof nextRoomGame> | undefined;
+    let capturedForMission:import("@xiangqi/rules").Piece|undefined;
     try {
       if (!game) ack = moveFailure("GAME_NOT_STARTED", request.requestId);
       else if (game.result.status !== "playing") ack = moveFailure("GAME_FINISHED", request.requestId, game.revision);
@@ -569,6 +591,7 @@ export class RoomsService implements OnModuleDestroy {
       else if (!isLegalMove(game.pieces, identity.seat, request.pieceId, request.to, room.match?.items.effects)) {
         ack = moveFailure("ILLEGAL_MOVE", request.requestId, game.revision);
       } else {
+        capturedForMission=game.pieces.find(piece=>piece.id!==request.pieceId&&piece.position.row===request.to.row&&piece.position.col===request.to.col);
         next = nextRoomGame(game, request.pieceId, request.to, !!room.itemsEnabled);
         const nextItems = room.match ? afterItemMove(room.match.items, next) : undefined;
         if (room.itemsEnabled && room.match && nextItems && room.gameClock) {
@@ -592,13 +615,14 @@ export class RoomsService implements OnModuleDestroy {
             if (next.result.status === "playing") room.gameClock = nextClockTurn(room.gameClock, next.sideToMove, acceptedAt);
             else this.stopGameClock(room, acceptedAt);
           }
+          if(next.result.status!=="playing")room.resultAt??=acceptedAt;
           ack = { ok: true, requestId: request.requestId, appliedRevision: next.revision };
         }
       }
     } catch { ack = moveFailure("INTERNAL_ERROR", request.requestId, game?.revision); }
     const entries = rememberAction(player.requests, { kind: "move", request, ack }, !!room.red.accountId);
     // Chuẩn bị mọi dữ liệu trước khi ghi, không để lại bàn dở dang khi tính luật lỗi.
-    if (next) room.game = next;
+    if (next) {room.game = next;if(capturedForMission)room.missionCaptures=[...(room.missionCaptures??[]),structuredClone(capturedForMission)];}
     player.requests = entries;
     if (next) this.scheduleRoom(room, this.clock.now());
     if (next) this.notifyChange(identity.roomCode);
@@ -745,6 +769,7 @@ export class RoomsService implements OnModuleDestroy {
       else {
         if (action==="draw_accept") {
           room.game={...room.game,revision:room.game.revision+1,result:{status:"draw",reason:"agreement"}};
+          room.resultAt??=now;
           this.stopGameClock(room,now);
         }
         ack={ok:true,requestId:request.requestId,stateVersion:this.matchVersion(room)};
@@ -793,7 +818,7 @@ export class RoomsService implements OnModuleDestroy {
       }
     } catch { ack = resignFailure("INTERNAL_ERROR", request.requestId, game?.revision); }
     const entries = rememberAction(player.requests, { kind: "resign", request, ack }, !!room.red.accountId);
-    if (next) { room.game = next; this.stopGameClock(room, acceptedAt!); }
+    if (next) { room.game = next; room.resultAt??=acceptedAt!; this.stopGameClock(room, acceptedAt!); }
     player.requests = entries;
     if (next) this.scheduleRoom(room, this.clock.now());
     if (next) this.notifyChange(identity.roomCode);

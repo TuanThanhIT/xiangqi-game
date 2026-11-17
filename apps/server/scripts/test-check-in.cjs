@@ -25,12 +25,12 @@ test("Daily check-in: isolated PostgreSQL, cycle, wallet and HTTP",{timeout:9000
  try{
   assert.equal((await admin.query("select current_database() as name")).rows[0].name,"xiangqi_dev");await admin.query(`CREATE SCHEMA "${testSchema}"`);
   pool=new Pool({connectionString:databaseUrl(),options:`-c search_path=${testSchema}`,connectionTimeoutMillis:5000});const db=drizzle(pool,{schema});
-  const names=["0000_cultured_marten_broadcloak.sql","0001_dear_proteus.sql","0002_colorful_titanium_man.sql","0003_thin_payback.sql","0004_shallow_blacklash.sql","0005_secret_sabretooth.sql","0006_peaceful_mongoose.sql"];
+  const names=["0000_cultured_marten_broadcloak.sql","0001_dear_proteus.sql","0002_colorful_titanium_man.sql","0003_thin_payback.sql","0004_shallow_blacklash.sql","0005_secret_sabretooth.sql","0006_peaceful_mongoose.sql","0007_fearless_human_fly.sql"];
   temp=mkdtempSync(resolve(tmpdir(),"xiangqi-check-in-migrations-"));mkdirSync(resolve(temp,"meta"));
   for(const name of names)writeFileSync(resolve(temp,name),readFileSync(resolve(__dirname,"../drizzle",name),"utf8").replaceAll('"public".',`"${testSchema}".`));
   writeFileSync(resolve(temp,"meta","_journal.json"),readFileSync(resolve(__dirname,"../drizzle/meta/_journal.json"),"utf8"));
   const migrationSchema=`${testSchema}_migrations`;await migrate(db,{migrationsFolder:temp,migrationsSchema:migrationSchema});await migrate(db,{migrationsFolder:temp,migrationsSchema:migrationSchema});
-  assert.equal((await admin.query(`select count(*)::int count from "${migrationSchema}"."__drizzle_migrations"`)).rows[0].count,7);
+  assert.equal((await admin.query(`select count(*)::int count from "${migrationSchema}"."__drizzle_migrations"`)).rows[0].count,8);
   app=await NestFactory.create(AppModule,{logger:false,abortOnError:false,bodyParser:false});app.get(DatabaseService).db=db;
   const service=app.get(CheckInService),wallet=app.get(WalletService);let now=new Date("2026-01-01T05:00:00.000Z");service.clock={now:()=>new Date(now)};
   const password="Check-in-test-password-2026",passwordHash=await hashPassword(password);

@@ -6,6 +6,7 @@ import type { JsonParserApplication } from "./configure-http";
 import { DatabaseService } from "./db/database.service";
 import { BettingService } from "./wallet/betting.service";
 import { MatchRewardService } from "./wallet/match-reward.service";
+import { MissionService } from "./missions/mission.service";
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create<JsonParserApplication>(AppModule, { abortOnError: false, bodyParser: false });
@@ -15,6 +16,7 @@ async function bootstrap(): Promise<void> {
   await app.get(DatabaseService).acquireGameRuntime();
   await app.get(BettingService).recover();
   await app.get(MatchRewardService).recover();
+  await app.get(MissionService).recover();
   await app.listen(3001);
 }
 

@@ -239,6 +239,74 @@ export const dailyCheckIns = pgTable("daily_check_ins", {
   check("daily_check_ins_entries",sql`${t.dailyEntryNo} > 0 and (${t.milestoneEntryNo} is null or ${t.milestoneEntryNo} = ${t.dailyEntryNo} + 1)`),
 ]);
 
+export const missionDefinitions = pgTable("mission_definitions", {
+  code: text("code").primaryKey(),
+  category: text("category").notNull(),
+  metric: text("metric").notNull(),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  target: integer("target").notNull(),
+  rewardGold: bigint("reward_gold", {mode:"number"}).notNull(),
+  active: boolean("active").notNull().default(true),
+  version: integer("version").notNull().default(1),
+  displayOrder: integer("display_order").notNull(),
+}, t => [
+  check("mission_definitions_category", sql`${t.category} in ('daily','weekly','achievement')`),
+  check("mission_definitions_metric", sql`${t.metric} in ('completed_matches','wins','captures','cannon_captures','item_usages','win_without_item')`),
+  check("mission_definitions_values", sql`${t.target} > 0 and ${t.rewardGold} >= 0 and ${t.version} > 0 and ${t.displayOrder} > 0`),
+  uniqueIndex("mission_definitions_display_unique").on(t.category,t.displayOrder),
+]);
+
+export const missionProgress = pgTable("mission_progress", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  accountId: uuid("account_id").notNull().references(() => accounts.id, {onDelete:"cascade"}),
+  missionCode: text("mission_code").notNull().references(() => missionDefinitions.code),
+  periodKey: text("period_key").notNull(),
+  progress: bigint("progress", {mode:"number"}).notNull().default(0),
+  targetSnapshot: integer("target_snapshot").notNull(),
+  rewardGoldSnapshot: bigint("reward_gold_snapshot", {mode:"number"}).notNull(),
+  definitionVersion: integer("definition_version").notNull(),
+  status: text("status").notNull().default("in_progress"),
+  completedAt: timestamp("completed_at", {withTimezone:true}),
+  claimedAt: timestamp("claimed_at", {withTimezone:true}),
+  walletEntryNo: integer("wallet_entry_no"),
+  walletAvailableAfter: bigint("wallet_available_after", {mode:"number"}),
+  createdAt: timestamp("created_at", {withTimezone:true}).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", {withTimezone:true}).notNull().defaultNow(),
+}, t => [
+  uniqueIndex("mission_progress_account_code_period_unique").on(t.accountId,t.missionCode,t.periodKey),
+  index("mission_progress_account_status_idx").on(t.accountId,t.status),
+  check("mission_progress_values", sql`${t.progress} >= 0 and ${t.targetSnapshot} > 0 and ${t.rewardGoldSnapshot} >= 0 and ${t.definitionVersion} > 0`),
+  check("mission_progress_status", sql`${t.status} in ('in_progress','completed','claimed','expired')`),
+  check("mission_progress_state", sql`
+    (${t.status} = 'in_progress' and ${t.completedAt} is null and ${t.claimedAt} is null and ${t.walletEntryNo} is null and ${t.walletAvailableAfter} is null) or
+    (${t.status} = 'completed' and ${t.completedAt} is not null and ${t.claimedAt} is null and ${t.walletEntryNo} is null and ${t.walletAvailableAfter} is null) or
+    (${t.status} = 'claimed' and ${t.completedAt} is not null and ${t.claimedAt} is not null and ${t.walletEntryNo} is not null and ${t.walletAvailableAfter} is not null) or
+    (${t.status} = 'expired' and ${t.claimedAt} is null and ${t.walletEntryNo} is null and ${t.walletAvailableAfter} is null)`),
+]);
+
+export const missionContributions = pgTable("mission_contributions", {
+  matchId: uuid("match_id").notNull(),
+  accountId: uuid("account_id").notNull().references(() => accounts.id, {onDelete:"cascade"}),
+  version: integer("version").notNull(),
+  resultStatus: text("result_status").notNull(),
+  reason: text("reason").notNull(),
+  completedMatches: integer("completed_matches").notNull(),
+  wins: integer("wins").notNull(),
+  captures: integer("captures").notNull(),
+  cannonCaptures: integer("cannon_captures").notNull(),
+  itemUsages: integer("item_usages").notNull(),
+  wonWithoutItem: integer("won_without_item").notNull(),
+  resultAt: timestamp("result_at", {withTimezone:true}).notNull(),
+  recordedAt: timestamp("recorded_at", {withTimezone:true}).notNull().defaultNow(),
+  appliedAt: timestamp("applied_at", {withTimezone:true}),
+}, t => [
+  primaryKey({columns:[t.matchId,t.accountId,t.version]}),
+  index("mission_contributions_pending_idx").on(t.appliedAt),
+  check("mission_contributions_version", sql`${t.version} > 0`),
+  check("mission_contributions_values", sql`${t.completedMatches} between 0 and 1 and ${t.wins} between 0 and 1 and ${t.captures} >= 0 and ${t.cannonCaptures} >= 0 and ${t.cannonCaptures} <= ${t.captures} and ${t.itemUsages} >= 0 and ${t.wonWithoutItem} between 0 and 1`),
+]);
+
 export const walletEntries = pgTable("wallet_entries", {
   accountId: uuid("account_id").notNull().references(()=>wallets.accountId,{onDelete:"cascade"}),
   entryNo: integer("entry_no").notNull(),
@@ -247,6 +315,7 @@ export const walletEntries = pgTable("wallet_entries", {
   matchId: uuid("match_id").references(()=>wagers.matchId),
   rewardMatchId: uuid("reward_match_id").references(()=>casualMatchResults.matchId),
   checkInId: uuid("check_in_id").references(()=>dailyCheckIns.id),
+  missionProgressId: uuid("mission_progress_id").references(()=>missionProgress.id),
   purchaseId: uuid("purchase_id").references(()=>itemPurchases.id),
   metadata: jsonb("metadata").$type<Record<string,unknown>>().notNull().default(sql`'{}'::jsonb`),
   availableDelta: bigint("available_delta",{mode:"number"}).notNull(),
@@ -257,12 +326,13 @@ export const walletEntries = pgTable("wallet_entries", {
 },t=>[
   primaryKey({columns:[t.accountId,t.entryNo]}),
   uniqueIndex("wallet_entries_operation_unique").on(t.accountId,t.operationKey),
-  check("wallet_entries_reason",sql`${t.reason} in ('starter_grant','bet_hold','bet_refund','bet_payout','item_purchase','casual_match_win_reward','daily_check_in_reward','check_in_7_day_bonus','check_in_30_day_bonus')`),
+  check("wallet_entries_reason",sql`${t.reason} in ('starter_grant','bet_hold','bet_refund','bet_payout','item_purchase','casual_match_win_reward','daily_check_in_reward','check_in_7_day_bonus','check_in_30_day_bonus','mission_reward')`),
   check("wallet_entries_balances",sql`${t.availableAfter} >= 0 and ${t.heldAfter} >= 0 and ${t.entryNo} > 0`),
   check("wallet_entries_reference",sql`
-    (${t.reason} = 'starter_grant' and ${t.matchId} is null and ${t.purchaseId} is null and ${t.rewardMatchId} is null and ${t.checkInId} is null) or
-    (${t.reason} in ('bet_hold','bet_refund','bet_payout') and ${t.matchId} is not null and ${t.purchaseId} is null and ${t.rewardMatchId} is null and ${t.checkInId} is null) or
-    (${t.reason} = 'item_purchase' and ${t.matchId} is null and ${t.purchaseId} is not null and ${t.rewardMatchId} is null and ${t.checkInId} is null) or
-    (${t.reason} = 'casual_match_win_reward' and ${t.matchId} is null and ${t.purchaseId} is null and ${t.rewardMatchId} is not null and ${t.checkInId} is null) or
-    (${t.reason} in ('daily_check_in_reward','check_in_7_day_bonus','check_in_30_day_bonus') and ${t.matchId} is null and ${t.purchaseId} is null and ${t.rewardMatchId} is null and ${t.checkInId} is not null)`),
+    (${t.reason} = 'starter_grant' and ${t.matchId} is null and ${t.purchaseId} is null and ${t.rewardMatchId} is null and ${t.checkInId} is null and ${t.missionProgressId} is null) or
+    (${t.reason} in ('bet_hold','bet_refund','bet_payout') and ${t.matchId} is not null and ${t.purchaseId} is null and ${t.rewardMatchId} is null and ${t.checkInId} is null and ${t.missionProgressId} is null) or
+    (${t.reason} = 'item_purchase' and ${t.matchId} is null and ${t.purchaseId} is not null and ${t.rewardMatchId} is null and ${t.checkInId} is null and ${t.missionProgressId} is null) or
+    (${t.reason} = 'casual_match_win_reward' and ${t.matchId} is null and ${t.purchaseId} is null and ${t.rewardMatchId} is not null and ${t.checkInId} is null and ${t.missionProgressId} is null) or
+    (${t.reason} in ('daily_check_in_reward','check_in_7_day_bonus','check_in_30_day_bonus') and ${t.matchId} is null and ${t.purchaseId} is null and ${t.rewardMatchId} is null and ${t.checkInId} is not null and ${t.missionProgressId} is null) or
+    (${t.reason} = 'mission_reward' and ${t.matchId} is null and ${t.purchaseId} is null and ${t.rewardMatchId} is null and ${t.checkInId} is null and ${t.missionProgressId} is not null)`),
 ]);

@@ -15,6 +15,7 @@ import { ItemUsageService } from "../src/items/item-usage.service";
 import type { RoomClock } from "../src/rooms/room-clock";
 import type { Room, SeatResponse } from "../src/rooms/rooms.types";
 import type { MatchAck, MatchSnapshot } from "../src/rooms/match-engine";
+import { MissionService } from "../src/missions/mission.service";
 
 function event<T>(socket:Socket,name:string,predicate:(v:T)=>boolean=()=>true):Promise<T>{
  return new Promise((resolve,reject)=>{
@@ -41,6 +42,7 @@ test("Match Socket.IO: snapshot riêng, move ack/conflict, draw events, expiry, 
   let snapshots=0,consumes=0;app.get(LoadoutService).snapshot=async()=>{snapshots++;};
   app.get(ItemUsageService).consume=async input=>{consumes++;return {fingerprint:input.fingerprint} as never;};
   app.get(ItemUsageService).reconcile=async()=>undefined;
+  app.get(MissionService).record=async()=>{};app.get(MissionService).apply=async()=>{};
   configureHttp(app);await app.listen(0,"127.0.0.1");const base=await app.getUrl();
   const post=(path:string,id:string,body:object)=>fetch(base+path,{method:"POST",headers:{Origin:"http://localhost:3000",Authorization:`Bearer ${id}`,"Content-Type":"application/json"},body:JSON.stringify(body)});
   const red=await (await post("/casual-rooms","red",{themeId:"earth"})).json() as SeatResponse;

@@ -8,7 +8,8 @@ import { AuthModule } from "./auth/auth.module";
 import { WalletModule } from "./wallet/wallet.module";
 import { ItemsModule } from "./items/items.module";
 import { CheckInModule } from "./check-in/check-in.module";
+import { MissionModule } from "./missions/mission.module";
 
-@Module({ imports: [RoomsModule, DatabaseModule, AuthModule, WalletModule, ItemsModule, CheckInModule], controllers: [HealthController],
+@Module({ imports: [RoomsModule, DatabaseModule, AuthModule, WalletModule, ItemsModule, CheckInModule, MissionModule], controllers: [HealthController],
   providers: [{ provide: APP_FILTER, useClass: HttpErrorFilter }] })
 export class AppModule {}

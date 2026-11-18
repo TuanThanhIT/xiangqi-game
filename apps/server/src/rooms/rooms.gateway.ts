@@ -148,9 +148,12 @@ export class RoomsGateway implements OnGatewayInit, OnGatewayConnection, OnGatew
   private channel(code: string): string { return `room:${code}`; }
 
   @SubscribeMessage("match:snapshot")
-  handleMatchSnapshot(@ConnectedSocket() socket: RoomSocket): unknown {
+  handleMatchSnapshot(@ConnectedSocket() socket: RoomSocket, @MessageBody() payload?: unknown): unknown {
     try {
       if (!socket.connected || !socket.data.identity) return {ok:false,code:"socket_not_active"};
+      if (payload !== undefined && (typeof payload !== "object" || payload === null || Array.isArray(payload) || Object.keys(payload).length !== 0)) {
+        return {ok:false,code:"invalid_match_snapshot_request"};
+      }
       const snapshot=this.rooms.matchSnapshot(socket.data.identity,socket.id);
       return snapshot?{ok:true,snapshot}:{ok:false,code:"match_not_found"};
     } catch { return {ok:false,code:"internal_error"}; }

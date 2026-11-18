@@ -1,5 +1,6 @@
 import { BadRequestException, Body, Controller, Get, Header, Injectable, Param, PipeTransform, Post, Query, Req, UseGuards } from "@nestjs/common";
 import { AuthGuard, type AuthRequest } from "../auth/guards/auth.guard";
+import { AuthOriginGuard } from "../auth/guards/origin.guard";
 import { MissionService } from "./mission.service";
 import type { MissionCategory } from "./mission-catalog";
 
@@ -24,6 +25,6 @@ export class MissionController {
   constructor(private readonly missions:MissionService){}
   @Get() @Header("Cache-Control","no-store") list(@Req() request:AuthRequest,@Query("category",MissionCategoryPipe) category:MissionCategory|"all"){
     return this.missions.list(request.profile!.id,category);}
-  @Post(":code/claim") @Header("Cache-Control","no-store") claim(@Req() request:AuthRequest,@Param("code",MissionCodePipe) code:string,@Body(MissionClaimPipe) _body:object){
+  @Post(":code/claim") @UseGuards(AuthOriginGuard) @Header("Cache-Control","no-store") claim(@Req() request:AuthRequest,@Param("code",MissionCodePipe) code:string,@Body(MissionClaimPipe) _body:object){
     return this.missions.claim(request.profile!.id,code);}
 }

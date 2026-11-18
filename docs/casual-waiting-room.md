@@ -19,12 +19,15 @@ API mới qua proxy cùng origin `/api/casual-rooms` → Nest `/casual-rooms`:
 
 | Thao tác | Body | Kết quả |
 | --- | --- | --- |
-| POST `/casual-rooms` | `{ themeId }` | 201, ghế Đỏ |
+| POST `/casual-rooms` | `{ themeId, totalMinutes? }` | 201, ghế Đỏ; `totalMinutes` mặc định 15 |
+| POST `/casual-rooms/:code/time-control` | `{ totalMinutes }` | 200 `{ ok: true }`; chỉ chủ phòng |
 | POST `/casual-rooms/:code/join` | `{}` | 200, ghế Đen |
 | POST `/casual-rooms/:code/ready` | `{ ready: boolean }` | 200 `{ ok: true }` |
 | POST `/casual-rooms/:code/leave` | `{}` | 200 `{ ok: true }` |
 
 Tất cả dùng AuthGuard, OriginGuard, pipe input và filter Base. Tái sử dụng access token trong bộ nhớ, không retry POST. Response/snapshot Giải trí có `casual: true`; player thêm `ready` và `avatar`. Handshake Giải trí kiểm tra cả seat token và access token của đúng tài khoản. `room:left` thông báo đóng/rời phòng. Snapshot trận không chứa deadline phòng chờ, giữ validator V1.
+
+`totalMinutes` là quỹ thời gian tổng của mỗi người và chỉ nhận `5`, `10`, `15`, `30` hoặc `60`. Chủ phòng được đổi khi trận chưa bắt đầu và cả hai chưa cùng ở trạng thái sẵn sàng; khách nhận `NOT_ROOM_OWNER`, cấu hình bị khóa nhận `PLAYERS_READY` hoặc `GAME_ALREADY_STARTED`, giá trị sai nhận `INVALID_TIME_CONTROL`. Giới hạn mỗi lượt luôn là 60 giây (`turnMs: 60000`), độc lập với quỹ tổng. Snapshot công khai dùng mili-giây qua `timeControl.totalMs` và `timeControl.turnMs`.
 
 Giới hạn: phòng vẫn nằm trong RAM của **một tiến trình backend** như V1; khởi động lại server mất phòng. Chưa hỗ trợ đồng bộ phòng giữa nhiều instance hoặc lưu bền phòng vào PostgreSQL. Không thay đổi kiến trúc để mở rộng phạm vi này.
 

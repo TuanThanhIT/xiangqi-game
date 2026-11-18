@@ -30,7 +30,9 @@ Event: `friends:presence:snapshot`, `friends:presence:changed`, `friends:relatio
 
 ## Room invite
 
-Invite ở RAM, sống 60 giây; cooldown host-target 15 giây; tối đa 5 pending/host; requestId idempotent. Chỉ host của phòng waiting có ghế trống được mời current friend đang online/available. Accept kiểm tra lại friendship, block, expiry, phòng, ghế và trạng thái target rồi dùng chính `joinCasual`, không tự ready. Room đóng/đầy/bắt đầu, target offline sau grace, unfriend hoặc block làm invite invalidated. Restart xóa invite.
+Invite ở RAM, sống 60 giây; cooldown host-target 15 giây; tối đa 5 pending/host; requestId create idempotent. Chỉ host của phòng waiting có ghế trống được mời current friend đang online/available. Accept kiểm tra lại friendship, block, expiry, phòng, ghế và trạng thái target rồi dùng chính `joinCasual`, không tự ready. Room đóng/đầy/bắt đầu, target offline sau grace, unfriend hoặc block làm invite invalidated. Restart xóa invite.
+
+Accept và decline bắt buộc payload chính xác `{ requestId, inviteId }`. `requestId` là chuỗi 1–128 ký tự trong tập chữ, số, `.`, `_`, `:`, `-`. Kết quả được cache RAM 5 phút theo account + action + requestId và fingerprint inviteId: retry cùng payload trả đúng kết quả cũ, kể cả acknowledgement đầu bị mất; retry đồng thời chỉ join/emit một lần. Dùng lại requestId cho action hoặc invite khác trả `ROOM_INVITE_REQUEST_ID_CONFLICT`. Cache không gia hạn TTL, không làm sống lại invite và không dùng chung giữa hai account.
 
 ## History authorization và privacy
 

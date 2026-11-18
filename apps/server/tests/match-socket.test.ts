@@ -28,6 +28,9 @@ function event<T>(socket:Socket,name:string,predicate:(v:T)=>boolean=()=>true):P
 const emit=<T>(socket:Socket,name:string,payload:unknown={}):Promise<T>=>new Promise((resolve,reject)=>{
  socket.timeout(4000).emit(name,payload,(error:Error|null,value:T)=>error?reject(error):resolve(value));
 });
+const emitNoPayload=<T>(socket:Socket,name:string):Promise<T>=>new Promise((resolve,reject)=>{
+ socket.timeout(4000).emit(name,(error:Error|null,value:T)=>error?reject(error):resolve(value));
+});
 
 test("Match Socket.IO: snapshot riêng, move ack/conflict, draw events, expiry, reconnect và agreement",{timeout:30000},async()=>{
  const app=await NestFactory.create<JsonParserApplication>(AppModule,{logger:false,abortOnError:false,bodyParser:false});
@@ -54,12 +57,15 @@ test("Match Socket.IO: snapshot riêng, move ack/conflict, draw events, expiry, 
    clients.push(socket);const attached=event(socket,"room:session");socket.connect();await attached;return socket;
   }
   let sr=await connect(red,"red");const sb=await connect(black,"black");
+  assert.deepEqual(await emit(sr,"match:snapshot",{}),{ok:false,code:"match_not_found"});
   const room=(service as unknown as {rooms:Map<string,Room>}).rooms.get(red.roomCode)!;
   room.itemsEnabled=true;room.red.loadout=["scout"];room.black!.loadout=["seal"];
   await post(`/casual-rooms/${red.roomCode}/ready`,"red",{ready:true});
   const initial=event<MatchSnapshot>(sr,"match:state");await post(`/casual-rooms/${red.roomCode}/ready`,"black",{ready:true});
   const start=await initial;assert.deepEqual(start.ownLoadout,["scout"]);
   const snapshot=async(socket:Socket)=>(await emit<{ok:true;snapshot:MatchSnapshot}>(socket,"match:snapshot")).snapshot;
+  assert.equal((await emitNoPayload<{ok:boolean}>(sr,"match:snapshot")).ok,true);
+  for(const invalid of [{extra:true},null,[],"snapshot",1])assert.deepEqual(await emit(sr,"match:snapshot",invalid),{ok:false,code:"invalid_match_snapshot_request"});
   assert.deepEqual((await snapshot(sb)).ownLoadout,["seal"]);assert.equal(JSON.stringify(start).includes("seal"),false);
   const request=async(extra:object={})=>({matchId:start.matchId,requestId:randomUUID(),expectedVersion:(await snapshot(sr)).stateVersion,...extra});
   const item=await request({itemCode:"scout",targetPieceId:"black-soldier-0"});

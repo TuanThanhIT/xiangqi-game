@@ -38,7 +38,7 @@ test("shop, inventory and private pre-match loadouts",{timeout:90000},async t=>{
   const password="Items-test-password-2026",passwordHash=await hashPassword(password);
   async function createUser(verified=true){const id=randomUUID(),email=`items-${id}@example.test`;await db.insert(schema.accounts).values({id,email,nickname:`Player ${id}`,passwordHash,emailVerifiedAt:verified?new Date():null});return{id,email};}
   const old=await createUser(),pending=await createUser(false);
-  await migrate("0002_colorful_titanium_man.sql");await migrate("0003_thin_payback.sql");await migrate("0004_shallow_blacklash.sql");await migrate("0005_secret_sabretooth.sql");await migrate("0006_peaceful_mongoose.sql");await migrate("0007_fearless_human_fly.sql");
+  await migrate("0002_colorful_titanium_man.sql");await migrate("0003_thin_payback.sql");await migrate("0004_shallow_blacklash.sql");await migrate("0005_secret_sabretooth.sql");await migrate("0006_peaceful_mongoose.sql");await migrate("0007_fearless_human_fly.sql");await migrate("0008_futuristic_romulus.sql");
   app=await NestFactory.create(AppModule,{logger:false,abortOnError:false,bodyParser:false});app.get(DatabaseService).db=db;configureHttp(app);await app.listen(0,"127.0.0.1");
   const catalog=app.get(CatalogService),inventory=app.get(InventoryService),shop=app.get(ShopService),wallet=app.get(WalletService),betting=app.get(BettingService),loadouts=app.get(LoadoutService),usage=app.get(ItemUsageService),rooms=app.get(RoomsService);
   const base=await app.getUrl();
@@ -61,7 +61,7 @@ test("shop, inventory and private pre-match loadouts",{timeout:90000},async t=>{
    assert.equal((await request("/inventory",old.token)).status,200);
    const id=randomUUID(),response=await request("/shop/purchases",old.token,{requestId:id,itemCode:"scout",quantity:2});assert.equal(response.status,200);
    assert.deepEqual(Object.assign({},await response.json(),{createdAt:"ignored"}),{requestId:id,itemCode:"scout",quantity:2,unitPrice:30,totalPrice:60,inventoryQuantity:3,availableGold:40,createdAt:"ignored"});
-   const history=await wallet.history(old.id);assert.equal(history.items[0].reason,"item_purchase");assert.ok(history.items[0].purchaseId);assert.equal(history.items[0].availableDelta,-60);
+   const history=await wallet.history(old.id);assert.equal(history.items[0].type,"item_purchase");assert.equal(history.items[0].reference.kind,"purchase");assert.equal(history.items[0].details.itemCode,"scout");assert.equal(history.items[0].availableDelta,-60);
    const created=await request("/casual-rooms",old.token,{themeId:"earth"});assert.equal(created.status,201);const seat=await created.json();
    assert.equal((await request(`/casual-rooms/${seat.roomCode}/items`,old.token,{enabled:true})).status,200);
    assert.equal((await request(`/casual-rooms/${seat.roomCode}/loadout`,old.token,{itemCodes:["scout"]})).status,200);

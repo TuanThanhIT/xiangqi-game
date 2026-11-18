@@ -11,6 +11,7 @@ import { SessionService } from "../src/auth/session/session.service";
 import type { SeatResponse, PublicGameState } from "../src/rooms/rooms.types";
 import { RoomsService } from "../src/rooms/rooms.service";
 import type { RoomClock } from "../src/rooms/room-clock";
+import { MatchHistoryService } from "../src/match-history/match-history.service";
 
 let now=1_000;
 const pendingTimers=new Set<()=>void>();
@@ -22,6 +23,7 @@ test("Casual HTTP/socket: authentication, identity binding, outsider/invalid inp
  try{
   // Replace only the room time source; HTTP, guards, pipes and Socket.IO stay real.
   (app.get(RoomsService) as unknown as {clock:RoomClock}).clock=fakeClock;
+  const history=app.get(MatchHistoryService);history.start=async()=>{};history.finalize=async()=>{};history.markActivity=async()=>{};history.updateStatuses=async()=>{};
   // Isolate room authorization from JWT cryptography/DB; real login is covered by Playwright.
   app.get(SessionService).authenticate=async authorization=>{
    const id=authorization?.replace(/^Bearer /,"");

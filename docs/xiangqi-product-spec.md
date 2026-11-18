@@ -83,7 +83,7 @@ Quyết định triển khai backend vật phẩm:
 - Tìm người chơi theo biệt danh duy nhất, gửi lời mời kết bạn. Quan hệ chỉ có hiệu lực khi người nhận chấp nhận. Một bên có thể hủy, làm mất quyền xem lịch sử qua hồ sơ của nhau. Trận đã đấu chung vẫn xem được trong lịch sử của chính mình.
 - Chủ phòng còn ghế trống có thể mời bạn bè online. Lời mời hiển thị người mời, mức cược, thời gian và tùy chọn vật phẩm. Hạn 60 giây, không giữ ghế. Hết hiệu lực ngay nếu phòng đóng hoặc ghế đã có người. Khách vào rồi vẫn phải sẵn sàng.
 - Hai người chat chữ và emoji trong trận. Mỗi tin tối đa 200 ký tự, mỗi người tối đa 3 tin trong bất kỳ 5 giây, tính chung chữ và emoji. Vượt hạn thì báo chờ và giữ bản đang soạn. Có nút Ẩn chat đối thủ trong ván, ẩn tin, emoji và dấu báo tin mới. Chat đóng khi ván kết thúc và không lưu trong lịch sử.
-- Lịch sử đấu hiển thị đối thủ, thời gian, kết quả, lý do kết thúc. Chi tiết có bàn cuối và vật phẩm đã dùng. Chủ hồ sơ thấy thêm lãi/lỗ vàng cược và thưởng thắng. Bạn bè xem được chi tiết trận nhưng phần vàng, số dư, lịch sử ví và kho chỉ chủ tài khoản thấy.
+- Lịch sử đấu mới được ghi bền vững trước các side effect wager/reward/mission, hiển thị đối thủ snapshot, thời gian, kết quả và lý do kết thúc. Chi tiết có bàn cuối khi còn dữ liệu, capture và vật phẩm đã dùng thành công; restart mất RAM tạo partial record, không dựng giả bàn. Participant thấy stake, lãi/lỗ của chính mình và thưởng thắng; người ngoài nhận 404. Quyền bạn bè xem chi tiết chỉ nối sau khi có friends backend; phần vàng, số dư, lịch sử ví và kho luôn chỉ chủ tài khoản thấy. Lịch sử ví dùng ledger chung, cursor theo entryNo, filter ngày Việt Nam và DTO allowlist, không trả metadata DB thô.
 
 ## 7. Mốc nghiệm thu
 

@@ -8,9 +8,10 @@ import { CasualRoomsController } from "./casual-rooms.controller";
 import { WalletModule } from "../wallet/wallet.module";
 import { ItemsModule } from "../items/items.module";
 import { MissionModule } from "../missions/mission.module";
+import { MatchHistoryModule } from "../match-history/match-history.module";
 
 @Module({
-  imports: [AuthModule,WalletModule,ItemsModule,MissionModule],
+  imports: [AuthModule,WalletModule,ItemsModule,MissionModule,MatchHistoryModule],
   controllers: [RoomsController, CasualRoomsController],
   providers: [RoomsService, RoomsGateway, RoomCodePipe, RoomRequestPipe, CreateRoomRequestPipe,
     { provide: ROOM_CODE_GENERATOR, useValue: generateRoomCode }],

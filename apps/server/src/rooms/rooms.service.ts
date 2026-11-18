@@ -28,6 +28,7 @@ import { ItemUsageService, type UsageInput } from "../items/item-usage.service";
 import { afterItemMove, casualResult, ItemRejected, parseItemRequest, refundTimeSaver, simulateItem, type ItemPlan } from "../items/item-effects";
 import { MissionService, type MissionMatchInput } from "../missions/mission.service";
 import { contributionSummaries } from "../missions/mission-contribution";
+import { MatchHistoryService } from "../match-history/match-history.service";
 
 // Token DI nội bộ, không lấy từ request hoặc biến môi trường.
 export const ROOM_CODE_GENERATOR = Symbol("ROOM_CODE_GENERATOR");
@@ -55,7 +56,8 @@ export class RoomsService implements OnModuleDestroy {
     @Optional() private readonly loadouts?:LoadoutService,
     @Optional() private readonly itemUsage?:ItemUsageService,
     @Optional() private readonly rewards?:MatchRewardService,
-    @Optional() private readonly missions?:MissionService) {}
+    @Optional() private readonly missions?:MissionService,
+    @Optional() private readonly history?:MatchHistoryService) {}
 
   private online(player: Room["red"] | null): boolean { return !!(player?.activeSocketId && player.presence); }
   private clearTimer(room: Room): void { room.timerVersion++; room.cancelTimer?.(); room.cancelTimer = null; }
@@ -162,7 +164,7 @@ export class RoomsService implements OnModuleDestroy {
     if (!isTotalMinutes(totalMinutes)) throw new BadRequestException({code:"INVALID_TIME_CONTROL"});
     this.ensureFree(profile.id);
     const response = this.create(profile.nickname, themeId), room = this.rooms.get(response.roomCode)!;
-    Object.assign(room.red, {accountId:profile.id, avatar:profile.avatar.assetPath, ready:false, loadout:[], offlineDeadline:this.clock.now()+60000});
+    Object.assign(room.red, {accountId:profile.id, avatar:profile.avatar.assetPath, avatarId:profile.avatar.id, ready:false, loadout:[], offlineDeadline:this.clock.now()+60000});
     room.totalMinutes = totalMinutes;
     room.itemsEnabled = false;
     this.scheduleRoom(room, this.clock.now());
@@ -244,12 +246,12 @@ export class RoomsService implements OnModuleDestroy {
   private assertNotStarting(room:Room):void {
     if(room.starting||room.cleanupPending)throw new ConflictException({code:"ROOM_STARTING"});
   }
-  private startGame(room:Room):void {
+  private startGame(room:Room,startedAt=this.clock.now()):void {
     room.game=createRoomGame();this.clearTimer(room);
     room.red.offlineDeadline=null;room.black!.offlineDeadline=null;
-    const now=this.clock.now();room.gameClock=startGameClock((room.totalMinutes??15)*60_000,now);
+    const now=startedAt;room.gameClock=startGameClock((room.totalMinutes??15)*60_000,now);
     room.gameMatchId ??= randomUUID();
-    room.missionStatus="unrecorded";room.missionCaptures=[];room.resultAt=undefined;
+    room.missionStatus="unrecorded";room.historyStatus=this.history?"active":undefined;room.missionCaptures=[];room.resultAt=undefined;
     room.match=createMatchSession(room.gameMatchId,now,{
       red:room.itemsEnabled?[...(room.red.loadout??[])]:[],
       black:room.itemsEnabled?[...(room.black!.loadout??[])]:[],
@@ -274,9 +276,14 @@ export class RoomsService implements OnModuleDestroy {
          !red.ready||!black.ready||!red.attached||!black.attached||!this.online(red)||!this.online(black)||(room.stake&&betStatus!=="held")) {
         throw new ConflictException({code:"ROOM_START_ABORTED"});
       }
+      const startedAt=this.clock.now();
+      if(this.history)await this.history.start({matchId,roomCode:room.code,startedAt:new Date(startedAt),totalMs:(room.totalMinutes??15)*60_000,turnMs:TURN_MS,
+        themeId:room.themeId,itemsEnabled:!!room.itemsEnabled,wagerStake:room.stake??0,
+        red:{accountId:red.accountId!,nickname:red.nickname,avatarId:red.avatarId??"default"},black:{accountId:black.accountId!,nickname:black.nickname,avatarId:black.avatarId??"default"}});
       room.gameMatchId=matchId;
-      this.startGame(room);
+      this.startGame(room,startedAt);
     }catch(error){
+      if(this.history)try{await this.history.abortStart(matchId);}catch{/* Startup recovery will reconcile a committed active row. */}
       if(room.itemsEnabled&&this.loadouts)try{await this.loadouts.discard(matchId);}catch{/* Orphan cleanup is retriable and must not expose DB details. */}
       if(error instanceof InsufficientGold){
         if(error.accountIds.includes(red.accountId!))red.ready=false;
@@ -331,6 +338,10 @@ export class RoomsService implements OnModuleDestroy {
     if(room.settlementFlight)return room.settlementFlight;
     const flight=Promise.resolve().then(async()=>{
       let failed=false;
+      if(this.history&&room.gameMatchId&&room.historyStatus!=="finalized"){
+        try{if(room.game!.result.status==="playing"||room.resultAt===undefined)throw new Error("match_not_finished");await this.history.finalize({matchId:room.gameMatchId,result:room.game!.result,endedAt:new Date(room.resultAt),moveCount:room.game!.moveNumber??0,pieces:room.game!.pieces,captures:room.missionCaptures??[],items:room.match?.items.history??[]});room.historyStatus="finalized";}catch{failed=true;}
+      }
+      if(failed)throw new Error("history_finalization_pending");
       const missionInput=this.missionInput(room);
       if(this.missions&&missionInput&&room.missionStatus==="unrecorded"){
         try{await this.missions.record(missionInput);room.missionStatus="recorded";}catch{failed=true;}
@@ -360,6 +371,7 @@ export class RoomsService implements OnModuleDestroy {
       if(this.missions&&room.gameMatchId&&room.missionStatus==="recorded"&&financesDone){
         try{await this.missions.apply(room.gameMatchId);room.missionStatus="applied";}catch{failed=true;}
       }
+      if(this.history&&room.gameMatchId)try{await this.history.updateStatuses(room.gameMatchId);}catch{failed=true;}
       if(failed)throw new Error("finalization_pending");
       this.retryRooms.delete(room);
     }).catch(()=>{this.scheduleRetry(room);}).finally(()=>{this.walletWork.delete(flight);room.settlementFlight=undefined;this.emitSettlementState(room);});
@@ -401,7 +413,7 @@ export class RoomsService implements OnModuleDestroy {
     // No await: simultaneous requests cannot create two games or reset a started game.
     if (room.red.ready && room.black?.ready && room.red.attached && room.black.attached &&
         this.online(room.red) && this.online(room.black)) {
-      if(room.stake||room.itemsEnabled){
+      if(room.stake||room.itemsEnabled||this.history){
         const matchId=room.gameMatchId??room.matchId??randomUUID();room.gameMatchId=matchId;
         if(room.stake)room.matchId=matchId;
         // Install the in-flight promise before any asynchronous hold can finish.
@@ -444,7 +456,7 @@ export class RoomsService implements OnModuleDestroy {
     do { token = randomBytes(32).toString("base64url"); } while (token === room.red.token);
     const game = profile ? null : createRoomGame();
     const black = { nickname, token, activeSocketId: null, attached: false, presence: false, requests: new Map(), offlineDeadline: null };
-    if (profile) Object.assign(black,{accountId:profile.id,avatar:profile.avatar.assetPath,ready:false,loadout:[],offlineDeadline:this.clock.now()+60000});
+    if (profile) Object.assign(black,{accountId:profile.id,avatar:profile.avatar.assetPath,avatarId:profile.avatar.id,ready:false,loadout:[],offlineDeadline:this.clock.now()+60000});
     const joined = { ...room, black, game };
     this.rooms.set(code, joined);
     this.refreshDeadlines(joined, this.clock.now());
@@ -526,6 +538,8 @@ export class RoomsService implements OnModuleDestroy {
        (this.missions&&room.missionStatus!=="applied"))) {
       this.kickSettlement(room);
     }
+    // A terminal board is not public until the central history row proves it durable.
+    if(room?.game&&room.red.accountId&&room.game.result.status!=="playing"&&this.history&&room.historyStatus!=="finalized")return;
     // Lỗi listener không được biến một thao tác đã ghi thành ack thất bại.
     for (const listener of this.changes.listeners("room-change")) {
       try { listener(code); } catch { /* Không log dữ liệu phòng hoặc token. */ }
@@ -622,7 +636,7 @@ export class RoomsService implements OnModuleDestroy {
     } catch { ack = moveFailure("INTERNAL_ERROR", request.requestId, game?.revision); }
     const entries = rememberAction(player.requests, { kind: "move", request, ack }, !!room.red.accountId);
     // Chuẩn bị mọi dữ liệu trước khi ghi, không để lại bàn dở dang khi tính luật lỗi.
-    if (next) {room.game = next;if(capturedForMission)room.missionCaptures=[...(room.missionCaptures??[]),structuredClone(capturedForMission)];}
+    if (next) {room.game = next;if(capturedForMission)room.missionCaptures=[...(room.missionCaptures??[]),structuredClone(capturedForMission)];if(this.history&&room.gameMatchId)void this.history.markActivity(room.gameMatchId,next.moveNumber??0);}
     player.requests = entries;
     if (next) this.scheduleRoom(room, this.clock.now());
     if (next) this.notifyChange(identity.roomCode);
@@ -710,7 +724,7 @@ export class RoomsService implements OnModuleDestroy {
           if(durable.fingerprint!==fingerprint)throw new ItemRejected("request_id_conflict");
         }
         // The pending gate guarantees no gameplay state can change after acceptedAt.
-        room.game=plan.game;room.gameClock=plan.clock;match.items=plan.items;
+        room.game=plan.game;room.gameClock=plan.clock;match.items=plan.items;if(this.history&&room.gameMatchId)await this.history.markActivity(room.gameMatchId,room.game.moveNumber??0);
         const ack:MatchAck={ok:true,requestId:request.requestId,stateVersion:this.matchVersion(room),...(plan.scout?{scout:plan.scout}:{})};
         match.requests.set(key,{fingerprint,ack:structuredClone(ack)});return ack;
       }catch(error){const ack=fail(error instanceof ItemRejected?error.code:"internal_error",request.requestId);

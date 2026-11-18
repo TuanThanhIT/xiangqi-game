@@ -57,6 +57,13 @@
       "when": 1794924191157,
       "tag": "0007_fearless_human_fly",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1794926765366,
+      "tag": "0008_futuristic_romulus",
+      "breakpoints": true
     }
   ]
 }

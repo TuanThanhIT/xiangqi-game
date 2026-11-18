@@ -51,7 +51,7 @@ test("Wallet/bets: isolated PostgreSQL, real HTTP/Auth/Socket.IO",{timeout:90000
   const old=await user(),oldPending=await user(false);
   await migrate("0002_colorful_titanium_man.sql");await migrate("0003_thin_payback.sql");
   await migrate("0004_shallow_blacklash.sql");await migrate("0005_secret_sabretooth.sql");
-  await migrate("0006_peaceful_mongoose.sql");await migrate("0007_fearless_human_fly.sql");
+  await migrate("0006_peaceful_mongoose.sql");await migrate("0007_fearless_human_fly.sql");await migrate("0008_futuristic_romulus.sql");
   app=await NestFactory.create(AppModule,{logger:false,abortOnError:false,bodyParser:false});
   app.get(DatabaseService).db=db;
   const wallet=app.get(WalletService),betting=app.get(BettingService),rooms=app.get(RoomsService);
@@ -118,7 +118,7 @@ test("Wallet/bets: isolated PostgreSQL, real HTTP/Auth/Socket.IO",{timeout:90000
    assert.equal((await request(`/wallet/${oldPending.id}`,old.token)).status,404);
    assert.equal((await request(`/wallet/history?accountId=${oldPending.id}`,old.token)).status,400);
    for(const query of ["limit=101","before=-1","limit=1&limit=2"])assert.equal((await request("/wallet/history?"+query,old.token)).status,400);
-   const history=await(await request("/wallet/history?limit=1",old.token)).json();assert.equal(history.items[0].reason,"starter_grant");assert.equal(history.items[0].matchId,null);assert.equal(history.nextCursor,null);
+   const history=await(await request("/wallet/history?limit=1",old.token)).json();assert.equal(history.items[0].type,"starter_grant");assert.equal(history.items[0].reference,null);assert.equal(history.items[0].netAmount,100);assert.equal(history.nextCursor,null);
   });
   await t.test("atomic holds and duplicate hold/settlement retries never spend the same gold twice",async()=>{
    const f=await held(60);await balances(f.red,40,60);await balances(f.black,40,60);
@@ -132,7 +132,7 @@ test("Wallet/bets: isolated PostgreSQL, real HTTP/Auth/Socket.IO",{timeout:90000
    await assert.rejects(()=>betting.finish(f.id,{...win,winner:"black",loser:"red"}));
    await login(f.red);await login(old);
    assert.equal((await request(`/wallet/bets/${f.id}`,f.red.token)).status,200);assert.equal((await request(`/wallet/bets/${f.id}`,old.token)).status,404);
-   const page=await wallet.history(f.red.id,undefined,1);assert.ok(page.nextCursor);assert.equal((await wallet.history(f.red.id,page.nextCursor,1)).items[0].reason,"bet_hold");
+   const page=await wallet.history(f.red.id,undefined,1);assert.ok(page.nextCursor);assert.equal((await wallet.history(f.red.id,page.nextCursor,1)).items[0].type,"bet_hold");
   });
   await t.test("different concurrent matches lock wallet balances; exactly one affordable hold",async()=>{
    const [red,black]=await pair(),ids=[randomUUID(),randomUUID()];

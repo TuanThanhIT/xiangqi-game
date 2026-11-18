@@ -9,7 +9,8 @@ import { WalletModule } from "./wallet/wallet.module";
 import { ItemsModule } from "./items/items.module";
 import { CheckInModule } from "./check-in/check-in.module";
 import { MissionModule } from "./missions/mission.module";
+import { MatchHistoryModule } from "./match-history/match-history.module";
 
-@Module({ imports: [RoomsModule, DatabaseModule, AuthModule, WalletModule, ItemsModule, CheckInModule, MissionModule], controllers: [HealthController],
+@Module({ imports: [RoomsModule, DatabaseModule, AuthModule, WalletModule, ItemsModule, CheckInModule, MissionModule, MatchHistoryModule], controllers: [HealthController],
   providers: [{ provide: APP_FILTER, useClass: HttpErrorFilter }] })
 export class AppModule {}

@@ -26,14 +26,14 @@ test("Reward: isolated PostgreSQL and durable idempotency",{timeout:90000},async
   assert.equal((await admin.query("select current_database() as name")).rows[0].name,"xiangqi_dev");
   await admin.query(`CREATE SCHEMA "${testSchema}"`);
   pool=new Pool({connectionString:databaseUrl(),options:`-c search_path=${testSchema}`,connectionTimeoutMillis:5000});
-  const names=["0000_cultured_marten_broadcloak.sql","0001_dear_proteus.sql","0002_colorful_titanium_man.sql","0003_thin_payback.sql","0004_shallow_blacklash.sql","0005_secret_sabretooth.sql","0006_peaceful_mongoose.sql","0007_fearless_human_fly.sql"];
+  const names=["0000_cultured_marten_broadcloak.sql","0001_dear_proteus.sql","0002_colorful_titanium_man.sql","0003_thin_payback.sql","0004_shallow_blacklash.sql","0005_secret_sabretooth.sql","0006_peaceful_mongoose.sql","0007_fearless_human_fly.sql","0008_futuristic_romulus.sql"];
   tempMigrations=mkdtempSync(resolve(tmpdir(),"xiangqi-reward-migrations-"));mkdirSync(resolve(tempMigrations,"meta"));
   for(const name of names)writeFileSync(resolve(tempMigrations,name),readFileSync(resolve(__dirname,"../drizzle",name),"utf8").replaceAll('"public".',`"${testSchema}".`));
   writeFileSync(resolve(tempMigrations,"meta","_journal.json"),readFileSync(resolve(__dirname,"../drizzle/meta/_journal.json"),"utf8"));
   const db=drizzle(pool,{schema}),database={db},migrationSchema=`${testSchema}_migrations`;
   await migrate(db,{migrationsFolder:tempMigrations,migrationsSchema:migrationSchema});
   await migrate(db,{migrationsFolder:tempMigrations,migrationsSchema:migrationSchema});
-  assert.equal((await admin.query(`select count(*)::int as count from "${migrationSchema}"."__drizzle_migrations"`)).rows[0].count,8);
+  assert.equal((await admin.query(`select count(*)::int as count from "${migrationSchema}"."__drizzle_migrations"`)).rows[0].count,9);
   const wallet=new WalletService(database),betting=new BettingService(database,wallet),rewards=new MatchRewardService(database,wallet);
   const passwordHash=await hashPassword("Reward-test-only-password-2026");
   async function user(){const id=randomUUID();await db.insert(schema.accounts).values({id,email:`reward-${id}@example.test`,nickname:`Reward ${id}`,passwordHash,emailVerifiedAt:new Date()});return {id};}
@@ -45,7 +45,7 @@ test("Reward: isolated PostgreSQL and durable idempotency",{timeout:90000},async
    for(const reason of ["checkmate","stalemate","total_timeout","turn_timeout","resignation"]){
     const f=await fixture();const row=await rewards.finish({...f,result:result(reason)});
     assert.equal(row.rewardStatus,"credited");assert.equal(row.rewardAmount,5);assert.equal(await balance(f.red.id),105);assert.equal(await balance(f.black.id),100);
-    const history=await wallet.history(f.red.id);assert.equal(history.items[0].reason,"casual_match_win_reward");assert.equal(history.items[0].matchId,f.matchId);assert.equal(history.items[0].availableDelta,5);
+    const history=await wallet.history(f.red.id);assert.equal(history.items[0].type,"casual_match_win_reward");assert.deepEqual(history.items[0].reference,{kind:"match",id:f.matchId});assert.equal(history.items[0].availableDelta,5);
    }
   });
   await t.test("disconnect, draw and cancellation persist as not eligible",async()=>{
@@ -72,7 +72,7 @@ test("Reward: isolated PostgreSQL and durable idempotency",{timeout:90000},async
    const f=await fixture();await betting.hold(f.matchId,f.roomCode,f.red.id,f.black.id,20);
    await betting.finish(f.matchId,result("resignation"));await rewards.finish({...f,result:result("resignation")});
    assert.equal(await balance(f.red.id),125);assert.equal(await balance(f.black.id),80);
-   const reasons=(await wallet.history(f.red.id,undefined,10)).items.map(x=>x.reason);assert.ok(reasons.includes("bet_payout"));assert.ok(reasons.includes("casual_match_win_reward"));
+   const reasons=(await wallet.history(f.red.id,undefined,10)).items.map(x=>x.type);assert.ok(reasons.includes("bet_payout"));assert.ok(reasons.includes("casual_match_win_reward"));
   });
  }finally{
   if(pool)await pool.end();

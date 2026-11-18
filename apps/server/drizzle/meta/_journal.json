@@ -64,6 +64,13 @@
       "when": 1794926765366,
       "tag": "0008_futuristic_romulus",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1794989792426,
+      "tag": "0009_light_lady_mastermind",
+      "breakpoints": true
     }
   ]
 }

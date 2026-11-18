@@ -22,6 +22,7 @@
     "test:check-in": "npm.cmd run build && node --test scripts/test-check-in.cjs",
     "test:missions": "npm.cmd run build && node --test scripts/test-missions.cjs",
     "test:history": "npm.cmd run build && node --test scripts/test-history.cjs",
+    "test:friends": "npm.cmd run build && node --test scripts/test-friends.cjs",
     "test:items": "npm.cmd run build && node --test scripts/test-items.cjs"
   },
   "dependencies": {

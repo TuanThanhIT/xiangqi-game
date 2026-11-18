@@ -176,6 +176,10 @@ export class RoomsService implements OnModuleDestroy {
     if (!room?.red.accountId) throw new NotFoundException({code:"ROOM_NOT_FOUND"});
     return this.join(code, profile.nickname, profile);
   }
+  friendActivity(accountId:string):"available"|"waiting_room"|"in_match" {for(const room of this.rooms.values()){if(room.red.accountId!==accountId&&room.black?.accountId!==accountId)continue;return room.game&&room.game.result.status==="playing"?"in_match":"waiting_room";}return"available";}
+  friendRoomAccounts(code:string):string[]{const room=this.rooms.get(code);return room?[room.red.accountId,room.black?.accountId].filter((x):x is string=>!!x):[];}
+  friendInviteRoom(code:string,ownerAccountId:string){const room=this.rooms.get(code);if(!room||room.red.accountId!==ownerAccountId||room.game||room.black||room.starting)throw new ConflictException({code:"room_not_available"});return{roomCode:room.code,themeId:room.themeId,timeControl:{totalMs:(room.totalMinutes??15)*60_000,turnMs:TURN_MS},itemsEnabled:!!room.itemsEnabled,hasWager:(room.stake??0)>0};}
+  acceptFriendInvite(code:string,profile:AuthProfile){return this.joinCasual(code,profile);}
   private accountSeat(code: string, accountId: string): {room:Room; side:"red"|"black"} {
     const room = this.rooms.get(code);
     if (!room) throw new NotFoundException({code:"ROOM_NOT_FOUND"});

@@ -378,6 +378,47 @@ export const matchHistoryParticipants = pgTable("match_history_participants", {
   index("match_history_participants_account_ended_idx").on(t.accountId,t.endedAt,t.matchId),
 ]);
 
+export const friendships = pgTable("friendships", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  accountLowId: uuid("account_low_id").notNull().references(()=>accounts.id),
+  accountHighId: uuid("account_high_id").notNull().references(()=>accounts.id),
+  createdAt: timestamp("created_at",{withTimezone:true}).notNull().defaultNow(),
+  acceptedAt: timestamp("accepted_at",{withTimezone:true}).notNull().defaultNow(),
+}, t=>[
+  uniqueIndex("friendships_pair_unique").on(t.accountLowId,t.accountHighId),
+  index("friendships_low_idx").on(t.accountLowId,t.acceptedAt),
+  index("friendships_high_idx").on(t.accountHighId,t.acceptedAt),
+  check("friendships_canonical_pair",sql`${t.accountLowId}::text < ${t.accountHighId}::text`),
+]);
+
+export const friendRequests = pgTable("friend_requests", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  senderAccountId: uuid("sender_account_id").notNull().references(()=>accounts.id),
+  recipientAccountId: uuid("recipient_account_id").notNull().references(()=>accounts.id),
+  accountLowId: uuid("account_low_id").notNull().references(()=>accounts.id),
+  accountHighId: uuid("account_high_id").notNull().references(()=>accounts.id),
+  status: text("status").notNull().default("pending"),
+  createdAt: timestamp("created_at",{withTimezone:true}).notNull().defaultNow(),
+  resolvedAt: timestamp("resolved_at",{withTimezone:true}),
+}, t=>[
+  uniqueIndex("friend_requests_pending_pair_unique").on(t.accountLowId,t.accountHighId).where(sql`${t.status} = 'pending'`),
+  index("friend_requests_sender_created_idx").on(t.senderAccountId,t.createdAt),
+  index("friend_requests_recipient_status_created_idx").on(t.recipientAccountId,t.status,t.createdAt),
+  check("friend_requests_accounts",sql`${t.senderAccountId} <> ${t.recipientAccountId} and ${t.accountLowId}::text < ${t.accountHighId}::text and ${t.senderAccountId} in (${t.accountLowId},${t.accountHighId}) and ${t.recipientAccountId} in (${t.accountLowId},${t.accountHighId})`),
+  check("friend_requests_status",sql`${t.status} in ('pending','accepted','rejected','cancelled','invalidated')`),
+  check("friend_requests_resolution",sql`(${t.status} = 'pending' and ${t.resolvedAt} is null) or (${t.status} <> 'pending' and ${t.resolvedAt} is not null)`),
+]);
+
+export const userBlocks = pgTable("user_blocks", {
+  blockerAccountId: uuid("blocker_account_id").notNull().references(()=>accounts.id),
+  blockedAccountId: uuid("blocked_account_id").notNull().references(()=>accounts.id),
+  createdAt: timestamp("created_at",{withTimezone:true}).notNull().defaultNow(),
+}, t=>[
+  primaryKey({columns:[t.blockerAccountId,t.blockedAccountId]}),
+  index("user_blocks_blocked_idx").on(t.blockedAccountId),
+  check("user_blocks_accounts",sql`${t.blockerAccountId} <> ${t.blockedAccountId}`),
+]);
+
 export const walletEntries = pgTable("wallet_entries", {
   accountId: uuid("account_id").notNull().references(()=>wallets.accountId,{onDelete:"cascade"}),
   entryNo: integer("entry_no").notNull(),

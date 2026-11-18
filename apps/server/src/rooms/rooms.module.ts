@@ -15,5 +15,6 @@ import { MatchHistoryModule } from "../match-history/match-history.module";
   controllers: [RoomsController, CasualRoomsController],
   providers: [RoomsService, RoomsGateway, RoomCodePipe, RoomRequestPipe, CreateRoomRequestPipe,
     { provide: ROOM_CODE_GENERATOR, useValue: generateRoomCode }],
+  exports: [RoomsService],
 })
 export class RoomsModule {}

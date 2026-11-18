@@ -10,7 +10,9 @@ import { ItemsModule } from "./items/items.module";
 import { CheckInModule } from "./check-in/check-in.module";
 import { MissionModule } from "./missions/mission.module";
 import { MatchHistoryModule } from "./match-history/match-history.module";
+import { FriendsModule } from "./friends/friends.module";
+import { SocialRealtimeModule } from "./friends/social-realtime.module";
 
-@Module({ imports: [RoomsModule, DatabaseModule, AuthModule, WalletModule, ItemsModule, CheckInModule, MissionModule, MatchHistoryModule], controllers: [HealthController],
+@Module({ imports: [RoomsModule, DatabaseModule, AuthModule, WalletModule, ItemsModule, CheckInModule, MissionModule, MatchHistoryModule, FriendsModule, SocialRealtimeModule], controllers: [HealthController],
   providers: [{ provide: APP_FILTER, useClass: HttpErrorFilter }] })
 export class AppModule {}

@@ -97,3 +97,8 @@ Quyết định triển khai backend vật phẩm:
 | Phát hành | Kiểm thử hai trình duyệt, desktop và 375px, bàn phím, migration trên môi trường thử nghiệm, sao lưu/khôi phục và hướng dẫn quay lui. |
 
 Khi thiết kế API cần xác định thứ tự xử lý hành động cạnh deadline, chuyển ngày Việt Nam trong trận, xử lý tiến độ nhiệm vụ khi trận phân thắng thua do mất kết nối, và các quy tắc phục hồi sau restart. Các điểm này cần được làm rõ trước khi triển khai phần phụ thuộc.
+# Friends backend V1
+
+Friends V1 dùng tìm chính xác biệt danh đã chuẩn hóa, lời mời hai chiều có transaction/idempotency, tối đa 100 bạn, 30 outgoing pending và 10 lời mời mới mỗi giờ. Block có hướng, ưu tiên hơn friendship và không bị lộ cho bên kia. Presence và lời mời phòng chỉ hoạt động trên một backend instance; presence có grace 30 giây, invite sống 60 giây.
+
+Bạn hiện tại được xem chi tiết gameplay của một trận có bạn mình là participant, kể cả kết bạn sau trận. Hủy bạn hoặc block thu hồi quyền ngay. Quyền này không mở danh sách lịch sử của người khác và không trả stake, lãi/lỗ, reward, wallet, inventory, loadout hay kết quả Trinh sát. Xem chi tiết tại `docs/friends-presence-backend.md`.

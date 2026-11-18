@@ -1,6 +1,21 @@
 import { ArgumentsHost, Catch, ExceptionFilter, HttpException } from "@nestjs/common";
 
 const errors: Record<string, { status: number; message: string }> = {
+  player_unavailable:{status:404,message:"Không tìm thấy người chơi hoặc người chơi hiện không khả dụng."},
+  friend_request_not_found:{status:404,message:"Không tìm thấy lời mời kết bạn."},
+  friend_request_already_pending:{status:409,message:"Lời mời kết bạn đang chờ xử lý."},
+  already_friends:{status:409,message:"Hai tài khoản đã là bạn bè."},
+  friend_limit_reached:{status:409,message:"Một trong hai tài khoản đã đạt giới hạn bạn bè."},
+  outgoing_request_limit_reached:{status:409,message:"Đã đạt giới hạn lời mời đang gửi."},
+  friend_request_rate_limited:{status:429,message:"Bạn đã gửi quá nhiều lời mời kết bạn. Vui lòng thử lại sau."},
+  friendship_not_found:{status:404,message:"Không tìm thấy quan hệ bạn bè."},
+  room_invite_not_found:{status:404,message:"Không tìm thấy lời mời vào phòng."},
+  room_invite_expired:{status:410,message:"Lời mời vào phòng đã hết hạn."},
+  room_invite_cooldown:{status:409,message:"Vui lòng chờ trước khi mời lại người chơi này."},
+  room_invite_limit_reached:{status:409,message:"Đã đạt giới hạn lời mời phòng đang chờ."},
+  friend_offline:{status:409,message:"Bạn bè hiện không trực tuyến."},
+  friend_busy:{status:409,message:"Bạn bè hiện đang ở phòng hoặc trong trận khác."},
+  room_not_available:{status:409,message:"Phòng hiện không còn khả dụng."},
   INVALID_BET: {status:400,message:"Mức cược phải là số vàng nguyên không âm."},
   INSUFFICIENT_GOLD: {status:409,message:"Chưa đủ vàng khả dụng để đặt cược. Vui lòng kiểm tra ví và sẵn sàng lại."},
   INVALID_WALLET_QUERY: {status:400,message:"Tham số xem lịch sử ví không hợp lệ."},

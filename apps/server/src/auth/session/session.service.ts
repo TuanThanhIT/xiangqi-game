@@ -32,12 +32,12 @@ export class SessionService {
     return { accessToken, expiresAt: new Date(expiry * 1000).toISOString(), profile: await this.profile(session.accountId) };
   }
 
-  async create(accountId: string) {
+  async create(accountId: string, db: DatabaseService["db"] = this.database.db) {
     // Validate config before creating the session.
     authConfig();
     const token = randomBytes(32).toString("base64url");
     const createdAt = this.now();
-    const [session] = await this.database.db.insert(sessions).values({ accountId, refreshTokenHash: refreshDigest(token),
+    const [session] = await db.insert(sessions).values({ accountId, refreshTokenHash: refreshDigest(token),
       createdAt, expiresAt: new Date(createdAt.getTime() + SESSION_MS) }).returning();
     return { result: await this.access(session), refreshToken: token, sessionExpiresAt: session.expiresAt };
   }

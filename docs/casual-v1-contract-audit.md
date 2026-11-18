@@ -310,3 +310,7 @@ reconnect luôn phải lấy snapshot hiện tại. Presence/invite vẫn chỉ 
 # Bổ sung hợp đồng chat trong trận
 
 Chat dùng `/rooms` với `match:chat:send` và `match:chat:snapshot`; server phát `match:chat:message` và `match:chat:closed`. Payload được kiểm tra strict, participant authorization dựa trên socket đang sở hữu ghế, requestId idempotent theo account/trận, và snapshot chỉ chứa dữ liệu chat công khai. Chat không mở rộng payload gameplay riêng tư và không làm lộ loadout, Scout, inventory hoặc wallet. Chi tiết tại `casual-match-chat-backend.md`.
+
+## Bổ sung hồ sơ và password reset
+
+`GET /profile` và catalog avatar chỉ đọc identity hiện tại; mutation nickname/avatar dùng Auth + Origin và payload strict. Password reset dùng response generic, OTP purpose riêng và revoke toàn bộ refresh session. Không mở rộng match/history DTO, không seed avatar và không lưu plaintext OTP/password. Chi tiết tại `profile-password-reset-backend.md`.

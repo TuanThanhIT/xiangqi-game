@@ -12,7 +12,8 @@ import { MissionModule } from "./missions/mission.module";
 import { MatchHistoryModule } from "./match-history/match-history.module";
 import { FriendsModule } from "./friends/friends.module";
 import { SocialRealtimeModule } from "./friends/social-realtime.module";
+import { ProfileModule } from "./profile/profile.module";
 
-@Module({ imports: [RoomsModule, DatabaseModule, AuthModule, WalletModule, ItemsModule, CheckInModule, MissionModule, MatchHistoryModule, FriendsModule, SocialRealtimeModule], controllers: [HealthController],
+@Module({ imports: [RoomsModule, DatabaseModule, AuthModule,ProfileModule, WalletModule, ItemsModule, CheckInModule, MissionModule, MatchHistoryModule, FriendsModule, SocialRealtimeModule], controllers: [HealthController],
   providers: [{ provide: APP_FILTER, useClass: HttpErrorFilter }] })
 export class AppModule {}

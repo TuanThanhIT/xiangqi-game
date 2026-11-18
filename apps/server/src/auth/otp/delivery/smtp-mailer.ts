@@ -24,10 +24,11 @@ export class SmtpMailer {
   constructor(private readonly config = smtpConfig()) { this.transport = nodemailer.createTransport(config); }
   async verify(): Promise<void> { await this.transport.verify(); }
   async send(mail: OtpMail): Promise<void> {
+    const reset = mail.purpose === "password_reset";
     const result = await this.transport.sendMail({
       from: { name: "Xiangqi Game", address: this.config.from }, to: mail.email,
-      subject: "Xác minh email đăng ký Xiangqi Game",
-      text: `Xin chào,\n\nMã xác minh email đăng ký Xiangqi Game của bạn là: ${mail.code}\n\nMã có hiệu lực 5 phút. Không chia sẻ mã này với bất kỳ ai.\nNếu bạn không đăng ký tài khoản, vui lòng bỏ qua email này.\n\nXiangqi Game`,
+      subject: reset ? "Mã đặt lại mật khẩu Xiangqi Game" : "Xác minh email đăng ký Xiangqi Game",
+      text: `Xin chào,\n\nMã ${reset ? "đặt lại mật khẩu" : "xác minh email đăng ký"} Xiangqi Game của bạn là: ${mail.code}\n\nMã có hiệu lực 5 phút. Không chia sẻ mã này với bất kỳ ai.\nNếu bạn không ${reset ? "yêu cầu đặt lại mật khẩu" : "đăng ký tài khoản"}, vui lòng bỏ qua email này.\n\nXiangqi Game`,
     });
     if (!result.accepted.some((address) => typeof address === "string" && address.toLowerCase() === mail.email.toLowerCase()) || result.rejected.length) throw new Error("SMTP_DELIVERY_REJECTED");
   }

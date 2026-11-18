@@ -24,7 +24,9 @@
     "test:history": "npm.cmd run build && node --test scripts/test-history.cjs",
     "test:friends": "npm.cmd run build && node --test scripts/test-friends.cjs",
     "test:items": "npm.cmd run build && node --test scripts/test-items.cjs",
-    "test:chat": "node scripts/test-chat.cjs"
+    "test:chat": "node scripts/test-chat.cjs",
+    "test:profile": "npm.cmd run build && node scripts/test-profile.cjs",
+    "test:password-reset": "npm.cmd run build && node scripts/test-password-reset.cjs"
   },
   "dependencies": {
     "@nestjs/common": "12.3.2",

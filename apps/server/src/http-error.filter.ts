@@ -38,6 +38,13 @@ const errors: Record<string, { status: number; message: string }> = {
   GAME_ALREADY_STARTED: {status:409,message:"Trận đã bắt đầu, không thể đổi cấu hình phòng chờ."},
   INVALID_REGISTRATION_INPUT: { status: 400, message: "Kiểm tra email, mật khẩu và biệt danh." },
   INVALID_NICKNAME: { status: 400, message: "Biệt danh cần từ 1 đến 30 ký tự." },
+  NICKNAME_ALREADY_IN_USE: {status:409,message:"Biệt danh đã được sử dụng."},
+  NICKNAME_CHANGE_COOLDOWN: {status:409,message:"Bạn chỉ có thể đổi biệt danh một lần mỗi 30 ngày."},
+  INVALID_AVATAR: {status:400,message:"Avatar không hợp lệ."},
+  AVATAR_NOT_FOUND: {status:404,message:"Không tìm thấy avatar."},
+  PROFILE_NOT_FOUND: {status:404,message:"Không tìm thấy hồ sơ."},
+  INVALID_PASSWORD_RESET_REQUEST: {status:400,message:"Thông tin đặt lại mật khẩu không hợp lệ."},
+  INVALID_OR_EXPIRED_RESET_CODE: {status:400,message:"Mã đặt lại mật khẩu không đúng hoặc đã hết hiệu lực."},
   EMAIL_IN_USE: { status: 409, message: "Email đã có tài khoản. Vui lòng đăng nhập." },
   NICKNAME_IN_USE: { status: 409, message: "Biệt danh đã được sử dụng." },
   REGISTRATION_EXPIRED: { status: 410, message: "Hồ sơ chờ đã hết hạn. Vui lòng đăng ký lại." },
@@ -67,6 +74,7 @@ export class HttpErrorFilter implements ExceptionFilter {
     let statusCode = 500;
     let code = "INTERNAL_ERROR";
     let message = "Đã xảy ra lỗi nội bộ.";
+    let safeDetails:Record<string,unknown>={};
     // INVALID_JSON đã được nhận diện tại middleware trước khi Nest bọc lỗi parser.
     if (error instanceof HttpException) {
       statusCode = error.getStatus();
@@ -75,6 +83,10 @@ export class HttpErrorFilter implements ExceptionFilter {
         ? body.code : statusCode === 404 ? "NOT_FOUND" : statusCode < 500 ? "REQUEST_ERROR" : "INTERNAL_ERROR";
       if (statusCode >= 500 && code !== "ROOM_CODE_UNAVAILABLE") code = "INTERNAL_ERROR";
       if (statusCode < 500) message = "Yêu cầu không hợp lệ.";
+      if(typeof body==="object"&&body!==null){
+        if("retryAfterMs" in body&&Number.isSafeInteger(body.retryAfterMs)&&Number(body.retryAfterMs)>=0)safeDetails.retryAfterMs=body.retryAfterMs;
+        if("nextNicknameChangeAt" in body&&typeof body.nextNicknameChangeAt==="string")safeDetails.nextNicknameChangeAt=body.nextNicknameChangeAt;
+      }
     }
     if (Object.hasOwn(errors, code)) {
       statusCode = errors[code].status;
@@ -86,6 +98,6 @@ export class HttpErrorFilter implements ExceptionFilter {
     }>();
     // Không ghi error/body/response ra log để tránh lộ token hoặc dữ liệu request.
     response.setHeader("Cache-Control", "no-store");
-    response.status(statusCode).json({ statusCode, code, message });
+    response.status(statusCode).json({ statusCode, code, message,...safeDetails });
   }
 }

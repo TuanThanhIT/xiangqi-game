@@ -7,7 +7,7 @@ import { SmtpMailer, smtpConfig } from "./smtp-mailer";
 
 export const mailboxDirectory = () => resolve(__dirname, "../../../../../../.tmp/otp-mailbox");
 export const mailboxFilename = (email: string) => createHash("sha256").update(email.trim().toLowerCase()).digest("hex") + ".json";
-export interface OtpMail { id: string; email: string; code: string }
+export interface OtpMail { id: string; email: string; code: string; purpose?: "email_verification"|"password_reset" }
 
 @Injectable()
 export class OtpMailer {

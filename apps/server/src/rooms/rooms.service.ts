@@ -29,6 +29,7 @@ import { afterItemMove, casualResult, ItemRejected, parseItemRequest, refundTime
 import { MissionService, type MissionMatchInput } from "../missions/mission.service";
 import { contributionSummaries } from "../missions/mission-contribution";
 import { MatchHistoryService } from "../match-history/match-history.service";
+import { MATCH_EMOTE_CODES, parseMatchChatRequest, sendMatchChat, type MatchChatAck } from "./match-chat";
 
 // Token DI nội bộ, không lấy từ request hoặc biến môi trường.
 export const ROOM_CODE_GENERATOR = Symbol("ROOM_CODE_GENERATOR");
@@ -41,6 +42,7 @@ export function generateRoomCode(): string {
 export class RoomsService implements OnModuleDestroy {
   private readonly rooms = new Map<string, Room>();
   private readonly changes = new EventEmitter();
+  private readonly chatEvents = new EventEmitter();
   // Gameplay decisions cannot overtake a transaction with an unknown outcome.
   // Presence can change while it runs; its absolute deadlines are adjudicated after reconciliation.
   private readonly pendingItems = new Map<Room, {side: Side; requestId: string; fingerprint: string; promise: Promise<MatchAck>}>();
@@ -533,8 +535,42 @@ export class RoomsService implements OnModuleDestroy {
     return () => { this.changes.off("room-change", listener); };
   }
 
+  onChatEvent(listener:(event:{roomCode:string;name:"match:chat:message"|"match:chat:closed";payload:unknown})=>void):()=>void {
+    this.chatEvents.on("chat",listener);return()=>this.chatEvents.off("chat",listener);
+  }
+  private closeChat(room:Room,now=this.clock.now()):void {
+    const chat=room.match?.chat,result=room.game?.result;if(!chat||!chat.open||!result||result.status==="playing")return;
+    chat.open=false;chat.closedAt=now;chat.closeReason=result.reason;
+    this.chatEvents.emit("chat",{roomCode:room.code,name:"match:chat:closed",payload:{matchId:room.match!.id,closedAt:now,reason:result.reason}});
+  }
+  canReceiveChat(identity:SeatIdentity,socketId:string,matchId:string):boolean {
+    const room=this.rooms.get(identity.roomCode),seat=room?.[identity.seat];
+    return !!(room?.match?.id===matchId&&seat?.accountId&&seat.attached&&this.ownsSocket(identity,socketId));
+  }
+  chatSend(identity:SeatIdentity,socketId:string,payload:unknown):MatchChatAck {
+    const parsed=parseMatchChatRequest(payload);if("code" in parsed)return {ok:false,requestId:parsed.requestId,code:parsed.code};
+    const room=this.rooms.get(identity.roomCode),seat=room?.[identity.seat];
+    if(!room||!seat?.accountId||!seat.attached||!this.ownsSocket(identity,socketId))return {ok:false,requestId:parsed.request.requestId,code:"CHAT_FORBIDDEN"};
+    if(!room.match||!room.game||room.match.id!==parsed.request.matchId)return {ok:false,requestId:parsed.request.requestId,code:"CHAT_NOT_AVAILABLE"};
+    const key=`${seat.accountId}:${parsed.request.requestId}`,cached=room.match.chat.requests.get(key);
+    if(cached){const ack=sendMatchChat(room.match.chat,parsed.request,parsed.fingerprint,identity.seat,seat.accountId,this.clock.now());return ack;}
+    if(this.evaluateDeadlines(room,this.clock.now()))this.notifyChange(room.code);
+    this.closeChat(room);if(this.pendingItems.has(room)||room.game.result.status!=="playing")return {ok:false,requestId:parsed.request.requestId,code:"CHAT_NOT_AVAILABLE"};
+    const ack=sendMatchChat(room.match.chat,parsed.request,parsed.fingerprint,identity.seat,seat.accountId,this.clock.now());
+    if(ack.ok&&!ack.replayed)this.chatEvents.emit("chat",{roomCode:room.code,name:"match:chat:message",payload:ack.message});
+    return ack;
+  }
+  chatSnapshot(identity:SeatIdentity,socketId:string,payload:unknown):unknown {
+    if(typeof payload!=="object"||payload===null||Array.isArray(payload)||Object.keys(payload).length!==1||!("matchId" in payload)||typeof payload.matchId!=="string"||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(payload.matchId))return {ok:false,code:"INVALID_CHAT_REQUEST"};
+    const room=this.rooms.get(identity.roomCode);if(!room?.match||payload.matchId!==room.match.id||!this.canReceiveChat(identity,socketId,room.match.id))return {ok:false,code:"CHAT_FORBIDDEN"};
+    this.closeChat(room);const chat=room.match.chat;
+    return {ok:true,snapshot:{matchId:room.match.id,open:chat.open,messages:structuredClone(chat.messages),latestSequence:chat.sequence,emoteCodes:[...MATCH_EMOTE_CODES],serverNow:this.clock.now()}};
+  }
+
   notifyChange(code: string): void {
     const room=this.rooms.get(code);
+    if(room)this.closeChat(room,room.resultAt??this.clock.now());
     if (room?.match && room.game?.result.status !== "playing") closeDraw(room.match);
     if(room?.game&&room.game.result.status!=="playing"&&room.red.accountId&&
       ((room.stake&&room.matchId&&room.betStatus!=="settled"&&room.betStatus!=="refunded")||

@@ -3,6 +3,7 @@ import type { OnlineGameResult } from "./room-game";
 import type { PublicClock } from "./game-clock";
 import { createItemState, type ItemState, type ScoutResult } from "../items/item-effects";
 import type { RoomReward } from "./rooms.types";
+import { createMatchChatState, type MatchChatState } from "./match-chat";
 
 export type MatchAction = "move" | "resign" | "draw_offer" | "draw_accept" | "draw_reject";
 export interface MatchRequest {
@@ -23,6 +24,7 @@ export interface DrawOffer {
   status: "pending" | "accepted" | "rejected" | "expired" | "closed";
 }
 export interface MatchSession {
+  chat: MatchChatState;
   items: ItemState;
   id: string;
   startedAt: number;
@@ -88,7 +90,7 @@ export function parseMatchRequest(value: unknown, action: MatchAction): MatchReq
   return request;
 }
 export function createMatchSession(id: string, startedAt: number, loadouts: Record<Side, string[]>): MatchSession {
-  return { id, startedAt, items: createItemState(), loadouts: structuredClone(loadouts), drawRevision: 0, offer: null,
+  return { id, startedAt, chat:createMatchChatState(), items: createItemState(), loadouts: structuredClone(loadouts), drawRevision: 0, offer: null,
     counts: {red: 0, black: 0}, lastOfferAt: {red: null, black: null}, requests: new Map() };
 }
 export function expireDraw(session: MatchSession, now: number): boolean {

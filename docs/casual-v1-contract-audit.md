@@ -307,3 +307,6 @@ reconnect luôn phải lấy snapshot hiện tại. Presence/invite vẫn chỉ 
 - Đặc tả đối chiếu: `docs/xiangqi-product-spec.md` cùng các tài liệu backend Auth,
   OTP, waiting room, clock, wallet, shop/loadout, match, item, reward, check-in,
   missions, history và Friends.
+# Bổ sung hợp đồng chat trong trận
+
+Chat dùng `/rooms` với `match:chat:send` và `match:chat:snapshot`; server phát `match:chat:message` và `match:chat:closed`. Payload được kiểm tra strict, participant authorization dựa trên socket đang sở hữu ghế, requestId idempotent theo account/trận, và snapshot chỉ chứa dữ liệu chat công khai. Chat không mở rộng payload gameplay riêng tư và không làm lộ loadout, Scout, inventory hoặc wallet. Chi tiết tại `casual-match-chat-backend.md`.

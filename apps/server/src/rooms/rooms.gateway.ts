@@ -11,6 +11,7 @@ import type { MoveAck } from "./move-request";
 import { resignFailure } from "./resign-request";
 import type { ResignAck } from "./resign-request";
 import type { MatchAction, MatchAck } from "./match-engine";
+import type { MatchChatAck } from "./match-chat";
 
 interface RoomSocketData { identity?: SeatIdentity }
 type RoomSocket = Socket<Record<string, never>, Record<string, (...args: unknown[]) => void>, Record<string, never>, RoomSocketData>;
@@ -31,6 +32,7 @@ export class RoomsGateway implements OnGatewayInit, OnGatewayConnection, OnGatew
   private server!: Namespace;
   private unsubscribe?: () => void;
   private unsubscribeDeparture?: () => void;
+  private unsubscribeChat?:()=>void;
 
   constructor(private readonly rooms: RoomsService, @Optional() private readonly sessions?: SessionService) {}
 
@@ -87,6 +89,13 @@ export class RoomsGateway implements OnGatewayInit, OnGatewayConnection, OnGatew
         if (snapshot.drawOffer) socket.emit("match:draw:state",{matchId:snapshot.matchId,stateVersion:snapshot.stateVersion,offer:snapshot.drawOffer});
       }
     });
+    this.unsubscribeChat=this.rooms.onChatEvent(event=>{
+      const matchId=(event.payload as {matchId?:unknown}).matchId;if(typeof matchId!=="string")return;
+      for(const socket of this.server.sockets.values()){
+        const identity=socket.data.identity as SeatIdentity|undefined;
+        if(identity&&this.rooms.canReceiveChat(identity,socket.id,matchId))socket.emit(event.name,event.payload);
+      }
+    });
   }
 
   handleConnection(socket: RoomSocket): void {
@@ -136,7 +145,7 @@ export class RoomsGateway implements OnGatewayInit, OnGatewayConnection, OnGatew
     } catch { return moveFailure("INTERNAL_ERROR", null); }
   }
 
-  onModuleDestroy(): void { this.unsubscribe?.(); this.unsubscribeDeparture?.(); }
+  onModuleDestroy(): void { this.unsubscribe?.(); this.unsubscribeDeparture?.(); this.unsubscribeChat?.(); }
   @SubscribeMessage("game:resign")
   handleResign(@ConnectedSocket() socket: RoomSocket, @MessageBody() payload: unknown): ResignAck {
     try {
@@ -157,6 +166,16 @@ export class RoomsGateway implements OnGatewayInit, OnGatewayConnection, OnGatew
       const snapshot=this.rooms.matchSnapshot(socket.data.identity,socket.id);
       return snapshot?{ok:true,snapshot}:{ok:false,code:"match_not_found"};
     } catch { return {ok:false,code:"internal_error"}; }
+  }
+  @SubscribeMessage("match:chat:send")
+  handleChatSend(@ConnectedSocket() socket:RoomSocket,@MessageBody() payload:unknown):MatchChatAck {
+    try{return socket.connected&&socket.data.identity?this.rooms.chatSend(socket.data.identity,socket.id,payload):{ok:false,requestId:null,code:"CHAT_FORBIDDEN"};}
+    catch{return {ok:false,requestId:null,code:"INTERNAL_ERROR"};}
+  }
+  @SubscribeMessage("match:chat:snapshot")
+  handleChatSnapshot(@ConnectedSocket() socket:RoomSocket,@MessageBody() payload:unknown):unknown {
+    try{return socket.connected&&socket.data.identity?this.rooms.chatSnapshot(socket.data.identity,socket.id,payload):{ok:false,code:"CHAT_FORBIDDEN"};}
+    catch{return {ok:false,code:"INTERNAL_ERROR"};}
   }
 
   private matchAction(socket: RoomSocket, action: MatchAction, payload: unknown): MatchAck {

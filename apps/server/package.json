@@ -23,7 +23,8 @@
     "test:missions": "npm.cmd run build && node --test scripts/test-missions.cjs",
     "test:history": "npm.cmd run build && node --test scripts/test-history.cjs",
     "test:friends": "npm.cmd run build && node --test scripts/test-friends.cjs",
-    "test:items": "npm.cmd run build && node --test scripts/test-items.cjs"
+    "test:items": "npm.cmd run build && node --test scripts/test-items.cjs",
+    "test:chat": "node scripts/test-chat.cjs"
   },
   "dependencies": {
     "@nestjs/common": "12.3.2",

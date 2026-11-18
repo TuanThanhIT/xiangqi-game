@@ -67,6 +67,16 @@ test("Match Socket.IO: snapshot riêng, move ack/conflict, draw events, expiry, 
   assert.equal((await emitNoPayload<{ok:boolean}>(sr,"match:snapshot")).ok,true);
   for(const invalid of [{extra:true},null,[],"snapshot",1])assert.deepEqual(await emit(sr,"match:snapshot",invalid),{ok:false,code:"invalid_match_snapshot_request"});
   assert.deepEqual((await snapshot(sb)).ownLoadout,["seal"]);assert.equal(JSON.stringify(start).includes("seal"),false);
+  const chatRequest={matchId:start.matchId,requestId:"socket-chat-1",kind:"text",text:"  xin\n chào  "};
+  const messages=[event<{text:string;sequence:number}>(sr,"match:chat:message"),event<{text:string;sequence:number}>(sb,"match:chat:message")];
+  const chatAck=await emit<{ok:true;replayed:boolean;message:{text:string;sequence:number}}>(sr,"match:chat:send",chatRequest);
+  assert.equal(chatAck.ok,true);assert.equal(chatAck.replayed,false);assert.equal(chatAck.message.text,"xin chào");
+  for(const message of await Promise.all(messages)){assert.equal(message.text,"xin chào");assert.equal(message.sequence,1);}
+  const replay=await emit<{ok:true;replayed:boolean}>(sr,"match:chat:send",chatRequest);assert.equal(replay.replayed,true);
+  assert.deepEqual(await emit(sr,"match:chat:send",{...chatRequest,text:"khác"}),{ok:false,requestId:"socket-chat-1",code:"CHAT_REQUEST_ID_CONFLICT"});
+  const chatSnapshot=await emit<{ok:true;snapshot:{open:boolean;messages:unknown[];latestSequence:number}}>(sb,"match:chat:snapshot",{matchId:start.matchId});
+  assert.equal(chatSnapshot.snapshot.open,true);assert.equal(chatSnapshot.snapshot.messages.length,1);assert.equal(chatSnapshot.snapshot.latestSequence,1);
+  assert.deepEqual(await emit(sb,"match:chat:snapshot",{}),{ok:false,code:"INVALID_CHAT_REQUEST"});
   const request=async(extra:object={})=>({matchId:start.matchId,requestId:randomUUID(),expectedVersion:(await snapshot(sr)).stateVersion,...extra});
   const item=await request({itemCode:"scout",targetPieceId:"black-soldier-0"});
   const privateState=event<MatchSnapshot>(sr,"match:state",s=>s.ownScout?.targetPieceId==="black-soldier-0");
@@ -89,6 +99,7 @@ test("Match Socket.IO: snapshot riêng, move ack/conflict, draw events, expiry, 
   assert.equal((await emit<MatchAck>(sr,"match:draw:offer",offer)).ok,true);assert.equal((await offerEvent).offer.status,"pending");
   const replaced=event(sr,"room:replaced");const old=sr;sr=await connect(red,"red");await replaced;assert.equal(old.connected,false);
   assert.equal((await snapshot(sr)).drawOffer!.id,offer.requestId);assert.equal((await snapshot(sr)).matchId,start.matchId);assert.equal(snapshots,1);
+  const reconnectedChat=await emit<{ok:true;snapshot:{messages:unknown[]}}>(sr,"match:chat:snapshot",{matchId:start.matchId});assert.equal(reconnectedChat.snapshot.messages.length,1);
   assert.equal((await emit<MatchAck>(sb,"match:draw:reject",await request({offerId:offer.requestId}))).ok,true);
   const second=await request();assert.equal((await emit<MatchAck>(sb,"match:draw:offer",second)).ok,true);
   const expired=event<{offer:{status:string}}>(sr,"match:draw:state",s=>s.offer.status==="expired");
@@ -96,8 +107,11 @@ test("Match Socket.IO: snapshot riêng, move ack/conflict, draw events, expiry, 
   assert.equal((await snapshot(sr)).clock.turnDeadlineAt,61000);
   // Sau expiry, dùng trận đang sống để kiểm tra handler đầu hàng mới và kết thúc hai socket.
   const ended=[event<MatchSnapshot>(sr,"match:ended"),event<MatchSnapshot>(sb,"match:ended")];
+  const chatClosed=[event<{reason:string}>(sr,"match:chat:closed"),event<{reason:string}>(sb,"match:chat:closed")];
   const resign=await request();assert.equal((await emit<MatchAck>(sr,"match:resign",resign)).ok,true);
   for(const state of await Promise.all(ended)){assert.equal(state.reason,"resignation");assert.equal(state.status,"finished");assert.equal(state.clock.runningSide,null);}
+  for(const closed of await Promise.all(chatClosed))assert.equal(closed.reason,"resignation");
+  assert.deepEqual(await emit(sb,"match:chat:send",{matchId:start.matchId,requestId:"late",kind:"emote",emoteCode:"GG"}),{ok:false,requestId:"late",code:"CHAT_NOT_AVAILABLE"});
   assert.equal((await emit<MatchAck>(sr,"match:resign",resign)).ok,true);
   assert.deepEqual((await snapshot(sb)).ownLoadout,["seal"]);
  }finally{for(const socket of clients)socket.disconnect();await app.close();}

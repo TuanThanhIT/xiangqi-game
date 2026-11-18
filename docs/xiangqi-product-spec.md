@@ -1,5 +1,7 @@
 # Đặc tả Xiangqi Game · Đợt Giải trí
 
+> Backend chat trong trận đã chốt giao thức RAM tại `docs/casual-match-chat-backend.md`: chỉ hai participant, text tối đa 120 Unicode code point, 8 emote allowlist, buffer 20 message, idempotency/rate-limit phía server và đóng ngay khi terminal. Mute vẫn là lọc cục bộ ở frontend; không lưu PostgreSQL.
+
 Bản 0.5 · 05/11/2026 · Tổng hợp các quyết định nghiệp vụ để nghiệm thu theo từng đợt.
 
 ## 1. Phạm vi và thứ tự bàn giao

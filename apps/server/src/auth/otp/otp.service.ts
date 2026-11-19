@@ -9,6 +9,7 @@ import { OtpMailer } from "./delivery/otp-mailer";
 
 type Tx = Parameters<Parameters<DatabaseService["db"]["transaction"]>[0]>[0];
 type Account = typeof accounts.$inferSelect;
+export interface OtpReservation { kind: "reservation"; id: string; accountId: string; emailKey: string; code: string }
 export interface VerificationState {
   status: "pending_verification"; accountId: string; maskedEmail: string;
   pendingExpiresAt: string; otpExpiresAt: string | null; resendAt: string; delivery: "sent" | "not_sent" | "failed";
@@ -38,25 +39,48 @@ export class OtpService {
       pendingExpiresAt: account.pendingExpiresAt.toISOString(), otpExpiresAt: otp?.expiresAt.toISOString() ?? null,
       resendAt: (await this.nextSend(tx, account.emailKey)).toISOString(), delivery };
   }
-  async send(tx: Tx, account: Account): Promise<VerificationState> {
+  async reserve(tx: Tx, account: Account): Promise<OtpReservation | VerificationState> {
     if ((await this.nextSend(tx, account.emailKey)).getTime() > this.now().getTime()) return this.state(tx, account);
+    const [inFlight] = await tx.select({ id: emailSends.id }).from(emailSends).where(and(eq(emailSends.emailKey, account.emailKey),
+      eq(emailSends.status, "failed"), gt(emailSends.attemptedAt, new Date(this.now().getTime() - 60000)))).limit(1);
+    if (inFlight) return this.state(tx, account);
     const [previous] = await tx.select().from(emailOtps).where(and(eq(emailOtps.accountId, account.id), eq(emailOtps.purpose, "email_verification")))
       .orderBy(desc(emailOtps.sentAt)).limit(1);
     const id = randomUUID();
     let code: string;
     do { code = randomInt(0, 1000000).toString().padStart(6, "0"); }
     while (previous && timingSafeEqual(Buffer.from(previous.digest, "hex"), Buffer.from(otpDigest(previous.id, account.id, code), "hex")));
-    const digest = otpDigest(id, account.id, code), attemptedAt = this.now();
-    // Persist a failed delivery record without throwing inside the transaction (which would roll it back).
-    await tx.insert(emailSends).values({ id, emailKey: account.emailKey, purpose: "email_verification", attemptedAt, status: "failed" });
-    try { await this.mailer.send({ id, email: account.emailKey, code }); }
-    catch { return this.state(tx, account, "failed"); }
-    const sentAt = this.now();
-    await tx.update(emailSends).set({ status: "sent", sentAt }).where(eq(emailSends.id, id));
-    await tx.update(emailOtps).set({ invalidatedAt: sentAt }).where(and(eq(emailOtps.accountId, account.id), eq(emailOtps.purpose, "email_verification"),
-      isNull(emailOtps.consumedAt), isNull(emailOtps.invalidatedAt)));
-    await tx.insert(emailOtps).values({ id, accountId: account.id, purpose: "email_verification", digest, sentAt, expiresAt: new Date(sentAt.getTime() + 300000) });
-    return this.state(tx, account, "sent");
+    await tx.insert(emailSends).values({ id, emailKey: account.emailKey, purpose: "email_verification", attemptedAt: this.now(), status: "failed" });
+    return { kind: "reservation", id, accountId: account.id, emailKey: account.emailKey, code };
+  }
+  async deliver(reservation: OtpReservation): Promise<VerificationState> {
+    try { await this.mailer.send({ id: reservation.id, email: reservation.emailKey, code: reservation.code }); }
+    catch {
+      return this.database.db.transaction(async tx => {
+        await this.lock(tx, reservation.emailKey);
+        await tx.delete(emailSends).where(and(eq(emailSends.id, reservation.id), eq(emailSends.status, "failed")));
+        const [account] = await tx.select().from(accounts).where(eq(accounts.id, reservation.accountId));
+        if (!account || account.emailVerifiedAt || account.pendingExpiresAt.getTime() <= this.now().getTime())
+          throw new HttpException({ code: "REGISTRATION_EXPIRED" }, 410);
+        return this.state(tx, account, "failed");
+      });
+    }
+    return this.database.db.transaction(async tx => {
+      await this.lock(tx, reservation.emailKey);
+      const [account] = await tx.select().from(accounts).where(and(eq(accounts.id, reservation.accountId),
+        eq(accounts.emailKey, reservation.emailKey))).for("update");
+      if (!account || account.emailVerifiedAt || account.pendingExpiresAt.getTime() <= this.now().getTime())
+        throw new HttpException({ code: "REGISTRATION_EXPIRED" }, 410);
+      const sentAt = this.now();
+      const [activated] = await tx.update(emailSends).set({ status: "sent", sentAt }).where(and(eq(emailSends.id, reservation.id),
+        eq(emailSends.emailKey, reservation.emailKey), eq(emailSends.purpose, "email_verification"), eq(emailSends.status, "failed"))).returning({ id: emailSends.id });
+      if (!activated) throw new ConflictException({ code: "OTP_SEND_LIMIT" });
+      await tx.update(emailOtps).set({ invalidatedAt: sentAt }).where(and(eq(emailOtps.accountId, account.id), eq(emailOtps.purpose, "email_verification"),
+        isNull(emailOtps.consumedAt), isNull(emailOtps.invalidatedAt)));
+      await tx.insert(emailOtps).values({ id: reservation.id, accountId: account.id, purpose: "email_verification",
+        digest: otpDigest(reservation.id, account.id, reservation.code), sentAt, expiresAt: new Date(sentAt.getTime() + 300000) });
+      return this.state(tx, account, "sent");
+    });
   }
   private async withPending<T>(accountId: string, action: (tx: Tx, account: Account) => Promise<T>): Promise<T> {
     return this.database.db.transaction(async (tx) => {
@@ -72,11 +96,14 @@ export class OtpService {
   }
   status(accountId: string): Promise<VerificationState> { return this.withPending(accountId, (tx, account) => this.state(tx, account)); }
   async resend(accountId: string): Promise<VerificationState> {
-    return this.withPending(accountId, async (tx, account) => {
+    const outcome = await this.withPending(accountId, async (tx, account) => {
       const resendAt = await this.nextSend(tx, account.emailKey);
       if (resendAt.getTime() > this.now().getTime()) throw new HttpException({ code: "OTP_SEND_LIMIT" }, 429);
-      return this.send(tx, account);
+      const reserved = await this.reserve(tx, account);
+      if (!("kind" in reserved)) throw new HttpException({ code: "OTP_SEND_LIMIT" }, 429);
+      return reserved;
     });
+    return this.deliver(outcome);
   }
   async verify(accountId: string, code: string | undefined): Promise<{ ok: true }> {
     if (!code || !/^\d{6}$/.test(code)) throw new BadRequestException({ code: "INVALID_OTP_INPUT" });

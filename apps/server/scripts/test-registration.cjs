@@ -21,13 +21,21 @@ async function main() {
     db = app.get(DatabaseService).db;
     assert.ok((await db.execute(sql`select current_database() as name`)).rows[0].name === "xiangqi_dev");
     const base = await app.getUrl(), suffix = randomUUID().slice(0, 8), password = randomBytes(24).toString("base64url");
-    let clock = new Date(), failMail = false;
+    let clock = new Date(), failMail = false, deferredMail = null;
     const delivered = [];
     app.get(RegistrationService).now = () => new Date(clock);
     app.get(SessionService).now = () => new Date(clock);
     app.get(LoginService).now = () => new Date(clock);
     app.get(OtpService).now = () => new Date(clock);
-    app.get(OtpMailer).send = async (message) => { if (failMail) throw new Error("fake delivery failure"); delivered.push(message); };
+    app.get(OtpMailer).send = async (message) => {
+      if (failMail) throw new Error("fake delivery failure");
+      if (deferredMail?.email === message.email) {
+        deferredMail.message = message;
+        deferredMail.entered();
+        await deferredMail.release;
+      }
+      delivered.push(message);
+    };
     const email = (label) => { const value = `${label}-${suffix}@xiangqi.test`; emails.push(value); return value; };
     const post = async (path, body) => {
       const response = await fetch(base + `/auth/${path}`, { method: "POST", headers: { Origin: "http://localhost:3000", "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -43,6 +51,48 @@ async function main() {
     const lastMail = (address) => delivered.filter((mail) => mail.email === address).at(-1);
     const row = async (id) => (await db.select().from(accounts).where(eq(accounts.id, id)))[0];
     const advance = (ms) => { clock = new Date(clock.getTime() + ms); };
+    const slowEmail = email("slow-smtp"), slowNickname = `Slow SMTP ${suffix}`;
+    let enteredResolve, releaseResolve;
+    const entered = new Promise((resolve) => { enteredResolve = resolve; });
+    const release = new Promise((resolve) => { releaseResolve = resolve; });
+    deferredMail = { email: slowEmail, entered: enteredResolve, release, message: null };
+    const slowRegistration = register(slowEmail, slowNickname);
+    await entered;
+    const [committedAccount] = await db.select().from(accounts).where(eq(accounts.emailKey, slowEmail));
+    const reservationsWhileSending = await db.select().from(emailSends).where(eq(emailSends.emailKey, slowEmail));
+    const activeWhileSending = committedAccount
+      ? await db.select().from(emailOtps).where(eq(emailOtps.accountId, committedAccount.id))
+      : [];
+    const retryWhileSending = await register(slowEmail, `Ignored retry ${suffix}`);
+    releaseResolve();
+    const slowResult = await slowRegistration;
+    deferredMail = null;
+    assert.ok(committedAccount && reservationsWhileSending.length === 1,
+      "account và delivery reservation phải commit trước khi gọi mailer");
+    assert.equal(activeWhileSending.length, 0, "OTP chưa được active khi SMTP chưa hoàn tất");
+    assert.ok(retryWhileSending.status === 200 && retryWhileSending.data.accountId === committedAccount.id
+      && retryWhileSending.data.otpExpiresAt === null,
+    "request xen giữa send/activate chỉ thấy hồ sơ pending, không tự activate hoặc gửi lại");
+    assert.ok(slowResult.status === 200 && slowResult.data.delivery === "sent");
+
+    const activationEmail = email("activate-failure");
+    let activationEnteredResolve, activationReleaseResolve;
+    const activationEntered = new Promise((resolve) => { activationEnteredResolve = resolve; });
+    deferredMail = { email: activationEmail, entered: activationEnteredResolve,
+      release: new Promise((resolve) => { activationReleaseResolve = resolve; }), message: null };
+    const activationRequest = register(activationEmail, `Activate failure ${suffix}`);
+    await activationEntered;
+    const [activationAccount] = await db.select().from(accounts).where(eq(accounts.emailKey, activationEmail));
+    const [activationReservation] = await db.select().from(emailSends).where(eq(emailSends.emailKey, activationEmail));
+    await db.delete(emailSends).where(eq(emailSends.id, activationReservation.id)); // Simulate phase-3 DB reconciliation failure.
+    activationReleaseResolve();
+    const activationResult = await activationRequest;
+    assert.equal(activationResult.status, 429);
+    assert.equal((await db.select().from(emailOtps).where(eq(emailOtps.accountId, activationAccount.id))).length, 0,
+      "email đã gửi nhưng activate thất bại không được tạo OTP hợp lệ");
+    deferredMail = null;
+    assert.ok((await resend(activationAccount.id)).data.delivery === "sent",
+      "retry sau activate failure phải tạo và gửi challenge mới");
     const [avatarBefore] = await db.select().from(avatars).where(eq(avatars.id, "default"));
     const a = email("same-name-a"), b = email("same-name-b");
     const collision = await Promise.all([register(a, `  Kỳ   THỦ ${suffix} `), register(b, `kỳ thủ ${suffix}`)]);
@@ -133,7 +183,7 @@ async function main() {
     const failedSend = await resend(failure.accountId);
     assert.ok(failedSend.status === 200 && failedSend.data.delivery === "failed");
     const sendsAfterFailure = await db.select().from(emailSends).where(and(eq(emailSends.emailKey, failureEmail), eq(emailSends.status, "failed")));
-    assert.ok(sendsAfterFailure.length === 1 && sendsAfterFailure[0].sentAt === null);
+    assert.equal(sendsAfterFailure.length, 0); // Failed reservation is removed so an immediate retry is safe.
     assert.ok(Date.parse(failedSend.data.resendAt) === clock.getTime());
     failMail = false;
     assert.ok((await verify(failure.accountId, validBeforeFailure)).status === 200);

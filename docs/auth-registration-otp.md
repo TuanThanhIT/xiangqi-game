@@ -82,8 +82,9 @@ Tham khảo: [Nodemailer SMTP](https://nodemailer.com/smtp),
 [mật khẩu ứng dụng Google](https://support.google.com/accounts/answer/185833).
 
 SMTP và DB không có giao dịch phân tán: nếu kết nối mất sau khi server đã nhận thư
-hoặc DB commit lỗi sau khi gửi, có thể có thư chứa mã chưa kích hoạt. Không retry
-tự động; yêu cầu gửi lại theo hạn mức. Gửi lỗi không vô hiệu mã cũ trong DB.
+hoặc transaction kích hoạt lỗi sau khi gửi, có thể có thư chứa mã chưa kích hoạt.
+Không retry tự động; yêu cầu gửi lại theo hạn mức. Gửi lỗi hoặc kích hoạt lỗi
+không vô hiệu mã cũ trong DB.
 
 Nghiệm thu tích hợp SMTP: typecheck/build backend đạt; 53 test backend đạt,
 `test:registration` và `test:auth` đạt. Playwright `registration.spec.mjs` đạt 2/2
@@ -115,12 +116,22 @@ danh đó được đăng ký lại; không phụ thuộc cron. Tài khoản đ�
 Email đang chờ còn hạn trả lại account ID/trạng thái, giữ nguyên hash mật khẩu,
 biệt danh và deadline; không gửi thêm OTP.
 
-Gửi/xác minh khóa giao dịch theo khóa email bằng PostgreSQL advisory lock và
-khóa account/OTP. Hạn mức là 60 giây giữa email gửi thành công, tối đa 5 email
+Gửi OTP dùng ba pha ngắn: transaction đầu khóa domain `auth-email:<email>`, kiểm
+tra cooldown/quota rồi commit account và delivery reservation; mailer chạy sau
+khi transaction, connection và lock đã được nhả; transaction cuối lấy lại cùng
+khóa để đối chiếu reservation, đánh dấu gửi thành công, vô hiệu mã cũ và kích
+hoạt mã mới. Xác minh vẫn khóa giao dịch theo email và khóa account/OTP. Hạn mức
+là 60 giây giữa email gửi thành công, tối đa 5 email
 trong cửa sổ `(now - 1 giờ, now]`, dùng chung mọi purpose. Lần gửi thất bại được
-ghi nhật ký nhưng không tính thành email đã gửi. Khi mailer xác nhận gửi xong,
+gỡ reservation nên không tính thành email đã gửi và có thể retry an toàn. Khi mailer xác nhận gửi xong,
 mã cũ mới bị vô hiệu và OTP mới có hạn 5 phút từ thời điểm gửi được ghi nhận.
 Gửi lại không sửa hạn giữ hồ sơ.
+
+Nếu SMTP thành công nhưng transaction kích hoạt thất bại, reservation không được
+tự biến thành OTP hợp lệ: email đó có thể chứa mã không dùng được, request sau
+phải tạo challenge mới. Reservation chưa hoàn tất chặn request đồng thời trong
+tối đa 60 giây; request xen giữa hai pha chỉ thấy hồ sơ pending và OTP cũ còn
+hiệu lực, không tự kích hoạt mã chưa commit.
 
 OTP gồm 6 chữ số từ crypto.randomInt. HMAC-SHA256 có nhãn phiên bản, purpose,
 OTP ID và account ID, dùng khóa AUTH_ACCESS_SECRET hiện có; không lưu plaintext

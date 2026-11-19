@@ -19,7 +19,7 @@ export class PasswordResetService{
   const reservation=await this.database.db.transaction(async tx=>{
    await this.lock(tx,email);const [account]=await tx.select().from(accounts).where(and(eq(accounts.emailKey,email),isNotNull(accounts.emailVerifiedAt))).for("update");if(!account)return null;
    const now=this.now(),recent=await tx.select().from(emailSends).where(and(eq(emailSends.emailKey,email),eq(emailSends.status,"sent"),gt(emailSends.sentAt,new Date(now.getTime()-3600000)))).orderBy(desc(emailSends.sentAt)).limit(5);
-   const [inFlight]=await tx.select({id:emailSends.id}).from(emailSends).where(and(eq(emailSends.emailKey,email),eq(emailSends.purpose,"password_reset"),eq(emailSends.status,"failed"),gt(emailSends.attemptedAt,new Date(now.getTime()-60000)))).limit(1);
+   const [inFlight]=await tx.select({id:emailSends.id}).from(emailSends).where(and(eq(emailSends.emailKey,email),eq(emailSends.status,"failed"),gt(emailSends.attemptedAt,new Date(now.getTime()-60000)))).limit(1);
    if(inFlight||(recent[0]&&now.getTime()<recent[0].sentAt!.getTime()+60000)||recent.length>=5)return null;
    const id=randomUUID(),code=randomInt(0,1000000).toString().padStart(6,"0");await tx.insert(emailSends).values({id,emailKey:email,purpose:"password_reset",attemptedAt:now,status:"failed"});
    return {id,code,accountId:account.id};
